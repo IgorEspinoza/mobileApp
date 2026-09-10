@@ -1,0 +1,9 @@
+docs/
+supabase/
+.env.local
+.env.production
+.env*.local
+setup.bat
+setup.sh
+*.log
+
