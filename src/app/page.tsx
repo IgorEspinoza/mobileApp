@@ -20,13 +20,13 @@ export default function Home() {
 
         <div className="flex gap-4 justify-center pt-6">
           <Link
-            href="/auth/login"
+            href="/login"
             className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition"
           >
             Iniciar Sesión
           </Link>
           <Link
-            href="/auth/register"
+            href="/register"
             className="px-8 py-3 bg-secondary text-secondary-foreground rounded-lg font-semibold hover:opacity-90 transition"
           >
             Registrarse
@@ -42,4 +42,3 @@ export default function Home() {
     </main>
   );
 }
-

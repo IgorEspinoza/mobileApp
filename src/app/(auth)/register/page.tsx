@@ -46,7 +46,7 @@ export default function RegisterPage() {
         </h2>
         <p className="text-slate-400 text-sm">
           Revisa tu email para confirmar tu cuenta y luego{" "}
-          <Link href="/auth/login" className="text-blue-400">
+          <Link href="/login" className="text-blue-400">
             inicia sesión
           </Link>
           .
@@ -193,7 +193,7 @@ export default function RegisterPage() {
       <p className="text-center text-slate-400 text-sm mt-6">
         ¿Ya tienes cuenta?{" "}
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
         >
           Inicia sesión

@@ -30,7 +30,7 @@ export function useAuth() {
         await fetchProfile(session.user.id);
       } else if (event === "SIGNED_OUT") {
         logout();
-        router.push("/auth/login");
+        router.push("/login");
       }
     });
 
@@ -118,12 +118,12 @@ export function useAuth() {
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     logout();
-    router.push("/auth/login");
+    router.push("/login");
   };
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
     });
     if (error) throw error;
   };

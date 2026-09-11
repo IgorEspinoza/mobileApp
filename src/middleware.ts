@@ -3,14 +3,22 @@ import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_ROUTES = [
   "/",
-  "/auth/login",
-  "/auth/register",
-  "/auth/reset-password",
+  "/login",
+  "/register",
+  "/reset-password",
 ];
+
+// Rutas que deben responder siempre, con o sin sesion
+// (callback de OAuth y cambio de password via email)
+const ALWAYS_ALLOWED = ["/auth/callback", "/update-password"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   let response = NextResponse.next({ request });
+
+  if (ALWAYS_ALLOWED.some((route) => pathname.startsWith(route))) {
+    return response;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +50,7 @@ export async function middleware(request: NextRequest) {
 
   // Sin sesión y ruta protegida → login
   if (!session && !isPublicRoute) {
-    return NextResponse.redirect(new URL("/auth/login", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // Con sesión en auth pages → dashboard

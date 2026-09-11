@@ -74,7 +74,7 @@ export default function LoginPage() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-sm font-medium text-slate-300">Contraseña</label>
-            <Link href="/auth/reset-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <Link href="/reset-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
@@ -163,7 +163,7 @@ export default function LoginPage() {
       {/* Registro */}
       <p className="text-center text-slate-400 text-sm mt-6">
         ¿No tienes cuenta?{" "}
-        <Link href="/auth/register" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+        <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
           Regístrate gratis
         </Link>
       </p>

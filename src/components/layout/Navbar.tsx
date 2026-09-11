@@ -7,9 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/transactions", label: "Transacciones" },
-  { href: "/dashboard/gastos", label: "Gastos" },
-  { href: "/dashboard/metas", label: "Metas" },
+  { href: "/transactions", label: "Transacciones" },
 ];
 
 export function Navbar() {
@@ -119,4 +117,3 @@ export function Navbar() {
     </header>
   );
 }
-

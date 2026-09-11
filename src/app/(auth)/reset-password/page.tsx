@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
           un enlace para restablecer tu contraseña.
         </p>
         <Link
-          href="/auth/login"
+          href="/login"
           className="inline-block mt-6 text-blue-400 hover:text-blue-300 text-sm transition-colors"
         >
           ← Volver al login
@@ -101,7 +101,7 @@ export default function ResetPasswordPage() {
 
       <p className="text-center text-slate-400 text-sm mt-6">
         <Link
-          href="/auth/login"
+          href="/login"
           className="text-blue-400 hover:text-blue-300 transition-colors"
         >
           ← Volver al login

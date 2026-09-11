@@ -75,7 +75,7 @@ export function RecentTransactions({
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-lg font-semibold text-white">Últimas Transacciones</h3>
         <Link
-          href="/dashboard/transactions"
+          href="/transactions"
           className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
         >
           Ver todas →
