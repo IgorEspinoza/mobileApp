@@ -34,6 +34,18 @@ export interface ApprovePayload {
   description?: string;
 }
 
+export interface SyncAutoResult {
+  inserted: number;
+  fetched: number;
+  parsed: number;
+  duplicated: number;
+  ignored: number;
+  failed: number;
+  warnings: string[];
+  timed_out?: boolean;
+  used_bootstrap_fallback?: boolean;
+}
+
 interface ListResponse {
   items: EmailReviewItem[];
   total: number;
@@ -168,7 +180,17 @@ export function useEmailReview() {
 
       const data = (await res.json()) as {
         error?: string;
-        stats?: { inserted?: number };
+        stats?: {
+          inserted?: number;
+          fetched?: number;
+          parsed?: number;
+          duplicated?: number;
+          ignored?: number;
+          failed?: number;
+          timed_out?: boolean;
+          used_bootstrap_fallback?: boolean;
+        };
+        warnings?: string[];
       };
 
       if (!res.ok) {
@@ -176,11 +198,29 @@ export function useEmailReview() {
       }
 
       await fetchPending({ page: 1 });
-      return data.stats?.inserted ?? 0;
+      return {
+        inserted: data.stats?.inserted ?? 0,
+        fetched: data.stats?.fetched ?? 0,
+        parsed: data.stats?.parsed ?? 0,
+        duplicated: data.stats?.duplicated ?? 0,
+        ignored: data.stats?.ignored ?? 0,
+        failed: data.stats?.failed ?? 0,
+        timed_out: data.stats?.timed_out,
+        used_bootstrap_fallback: data.stats?.used_bootstrap_fallback,
+        warnings: data.warnings ?? [],
+      } satisfies SyncAutoResult;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       setError(message);
-      return -1;
+      return {
+        inserted: -1,
+        fetched: 0,
+        parsed: 0,
+        duplicated: 0,
+        ignored: 0,
+        failed: 1,
+        warnings: [message],
+      } satisfies SyncAutoResult;
     } finally {
       setIsSyncing(false);
     }

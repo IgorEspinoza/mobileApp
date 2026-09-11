@@ -117,9 +117,15 @@ export default function EmailReviewPage() {
   };
 
   const handleSyncAuto = async () => {
-    const inserted = await syncAuto({ limit: 10 });
-    if (inserted >= 0) {
-      toast.success(inserted > 0 ? `Sincronización OK: ${inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
+    const result = await syncAuto({ limit: 10 });
+    if (result.inserted >= 0) {
+      if (result.warnings.length > 0) {
+        toast.success(
+          `${result.inserted > 0 ? `OK: ${result.inserted} nuevo(s)` : "Sin nuevos"}. ${result.warnings[0]}`
+        );
+      } else {
+        toast.success(result.inserted > 0 ? `Sincronización OK: ${result.inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
+      }
     } else {
       toast.error("No se pudo sincronizar el correo automáticamente");
     }

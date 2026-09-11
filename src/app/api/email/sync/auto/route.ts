@@ -5,6 +5,7 @@ import { fetchEmailsFromImap } from "@/lib/email/imap";
 import { parsePurchaseEmail } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
+  EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
   EMAIL_SYNC_DEFAULT_LIMIT,
   EMAIL_SYNC_IMAP_TIMEOUT_MS,
   EMAIL_SYNC_MAX_LIMIT,
@@ -140,6 +141,9 @@ export async function POST(request: NextRequest) {
     const cfg = getImapConfig(emailImport.provider);
     const since = parseDateOrNull(emailImport.last_sync);
     const startedAt = Date.now();
+    const bootstrapSince = new Date(
+      Date.now() - EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+    );
 
     let parsed = 0;
     let inserted = 0;
@@ -156,18 +160,48 @@ export async function POST(request: NextRequest) {
         user: emailImport.email_address,
         password,
         mailbox: "INBOX",
-        since: since || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        since: since || bootstrapSince,
         limit,
         unseenOnly,
       }),
       EMAIL_SYNC_IMAP_TIMEOUT_MS
     );
 
-    const fetched = Array.isArray(imapResult) ? imapResult : [];
+    let fetched = Array.isArray(imapResult) ? imapResult : [];
+    let usedBootstrapFallback = false;
+
     if (imapResult === null) {
       warnings.push(
         "La lectura IMAP tardó demasiado y se interrumpió para evitar timeout. Intenta con menos correos o revisa la credencial IMAP."
       );
+    } else if (fetched.length === 0 && since) {
+      usedBootstrapFallback = true;
+      warnings.push(
+        `No se encontraron correos desde last_sync. Reintentando con los últimos ${EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS} días.`
+      );
+
+      const fallbackResult = await withTimeout(
+        fetchEmailsFromImap({
+          host: cfg.host,
+          port: cfg.port,
+          secure: cfg.secure,
+          user: emailImport.email_address,
+          password,
+          mailbox: "INBOX",
+          since: bootstrapSince,
+          limit,
+          unseenOnly: false,
+        }),
+        EMAIL_SYNC_IMAP_TIMEOUT_MS
+      );
+
+      fetched = Array.isArray(fallbackResult) ? fallbackResult : [];
+
+      if (fallbackResult === null) {
+        warnings.push(
+          "La lectura IMAP del fallback también tardó demasiado y se interrumpió para evitar timeout."
+        );
+      }
     }
 
     const preview: Array<{
@@ -262,12 +296,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const now = new Date().toISOString();
-    await supabaseAdmin
-      .from("email_imports")
-      .update({ last_sync: now })
-      .eq("id", emailImport.id)
-      .eq("user_id", user.id);
+    if (fetched.length > 0) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("email_imports")
+        .update({ last_sync: now })
+        .eq("id", emailImport.id)
+        .eq("user_id", user.id);
+    } else if (since || usedBootstrapFallback) {
+      warnings.push(
+        "No se actualizó last_sync porque no hubo correos leídos; así la próxima sincronización puede volver a intentar histórico."
+      );
+    }
 
     return NextResponse.json({
       message: "Sincronización automática completada",
@@ -280,6 +320,7 @@ export async function POST(request: NextRequest) {
         ignored,
         failed,
         timed_out: imapResult === null,
+          used_bootstrap_fallback: usedBootstrapFallback,
         remainingRateLimit: rate.remainingAttempts,
       },
       preview,

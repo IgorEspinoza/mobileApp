@@ -82,6 +82,7 @@ export const SCENARIO_TYPES = ["solo", "shared", "custom"] as const;
 export const EMAIL_PROVIDERS = ["gmail", "outlook"] as const;
 
 // Email Sync Limits
+export const EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS = 30;
 export const EMAIL_SYNC_DEFAULT_LIMIT = 10;
 export const EMAIL_SYNC_MAX_LIMIT = 20;
 export const EMAIL_SYNC_IMAP_TIMEOUT_MS = 12_000;
