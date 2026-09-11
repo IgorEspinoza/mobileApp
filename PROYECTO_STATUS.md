@@ -157,9 +157,12 @@
 - [x] Build production validado ✅
 - [x] Documentación de deploy lista (`README.md` actualizado) ✅
 - [x] Environment variables documentadas ✅
-- ⏳ Deploy a Vercel (listo para ejecución manual)
-- ⏳ Database migrations en producción (parte del deploy)
-- ⏳ SSL/HTTPS verification (automático en Vercel)
+- [x] Repositorio en GitHub (`IgorEspinoza/mobileApp`) ✅
+- [x] Deploy a Vercel ✅ → **https://mobile-app-gold-six.vercel.app**
+- [x] Environment variables configuradas en Vercel (4/4) ✅
+- [x] Database migrations ejecutadas en producción ✅
+- [x] SSL/HTTPS verificado (automático en Vercel) ✅
+- [ ] Auth URLs configuradas en Supabase
 
 ---
 
