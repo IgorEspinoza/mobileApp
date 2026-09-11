@@ -125,6 +125,8 @@ export async function POST(request: NextRequest) {
     let inserted = 0;
     let duplicated = 0;
     let ignored = 0;
+    let failed = 0;
+    const warnings: string[] = [];
 
     const preview: Array<{
       subject: string;
@@ -135,77 +137,89 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const email of payload.emails) {
-      const result = parsePurchaseEmail({
-        messageId: email.messageId || crypto.randomUUID(),
-        from: email.from,
-        to: email.to || "",
-        subject: email.subject || "",
-        body: email.body,
-        date: email.date ? new Date(email.date) : new Date(),
-      });
-
-      if (!result) {
-        ignored += 1;
-        continue;
-      }
-
-      parsed += 1;
-
-      const subject = (email.subject || "Sin asunto").slice(0, 300);
-      const merchant = (result.merchant || "Sin comercio").slice(0, 255);
-      const bodySnippet = (result.snippet || email.body || "").slice(0, 600);
-
-      // Deduplicado básico compatible con esquema actual (sin depender de migration 005).
-      const { data: duplicateRow } = await supabaseAdmin
-        .from("expense_classifications")
-        .select("id")
-        .eq("email_import_id", emailImportId)
-        .eq("subject", subject)
-        .eq("merchant", merchant)
-        .eq("body_snippet", bodySnippet)
-        .maybeSingle();
-
-      if (duplicateRow) {
-        duplicated += 1;
-        continue;
-      }
-
-      const row = {
-        email_import_id: emailImportId,
-        subject,
-        body_snippet: bodySnippet,
-        merchant,
-        predicted_category: result.category,
-        confidence: result.confidence,
-        manual_category: null,
-        status: result.confidence >= 0.9 ? "auto_classified" : "pending",
-      };
-
-      if (!payload.dry_run) {
-        const { error: insertError } = await supabaseAdmin
-          .from("expense_classifications")
-          .insert(row);
-
-        if (insertError) {
-          return NextResponse.json(
-            {
-              error: `Error guardando clasificación para "${subject}": ${insertError.message}`,
-            },
-            { status: 400 }
-          );
-        }
-      }
-
-      inserted += 1;
-
-      if (preview.length < 10) {
-        preview.push({
-          subject,
-          merchant,
-          category: result.category,
-          confidence: result.confidence,
-          status: row.status,
+      try {
+        const result = parsePurchaseEmail({
+          messageId: email.messageId || crypto.randomUUID(),
+          from: email.from,
+          to: email.to || "",
+          subject: email.subject || "",
+          body: email.body,
+          date: email.date ? new Date(email.date) : new Date(),
         });
+
+        if (!result) {
+          ignored += 1;
+          continue;
+        }
+
+        parsed += 1;
+
+        const subject = (email.subject || "Sin asunto").slice(0, 300);
+        const merchant = (result.merchant || "Sin comercio").slice(0, 255);
+        const bodySnippet = (result.snippet || email.body || "").slice(0, 600);
+
+        // Deduplicado básico compatible con esquema actual (sin depender de migration 005).
+        const { data: duplicateRow, error: duplicateError } = await supabaseAdmin
+          .from("expense_classifications")
+          .select("id")
+          .eq("email_import_id", emailImportId)
+          .eq("subject", subject)
+          .eq("merchant", merchant)
+          .eq("body_snippet", bodySnippet)
+          .maybeSingle();
+
+        if (duplicateError) {
+          failed += 1;
+          warnings.push(`No se pudo validar duplicado para \"${subject}\": ${duplicateError.message}`);
+          continue;
+        }
+
+        if (duplicateRow) {
+          duplicated += 1;
+          continue;
+        }
+
+        const row = {
+          email_import_id: emailImportId,
+          subject,
+          body_snippet: bodySnippet,
+          merchant,
+          predicted_category: result.category,
+          confidence: result.confidence,
+          manual_category: null,
+          status: result.confidence >= 0.9 ? "auto_classified" : "pending",
+        };
+
+        if (!payload.dry_run) {
+          const { error: insertError } = await supabaseAdmin
+            .from("expense_classifications")
+            .insert(row);
+
+          if (insertError) {
+            failed += 1;
+            warnings.push(`No se pudo guardar \"${subject}\": ${insertError.message}`);
+            continue;
+          }
+        }
+
+        inserted += 1;
+
+        if (preview.length < 10) {
+          preview.push({
+            subject,
+            merchant,
+            category: result.category,
+            confidence: result.confidence,
+            status: row.status,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        warnings.push(
+          `Error procesando \"${email.subject || "Sin asunto"}\": ${
+            error instanceof Error ? error.message : "error desconocido"
+          }`
+        );
       }
     }
 
@@ -221,9 +235,11 @@ export async function POST(request: NextRequest) {
           inserted,
           duplicated,
           ignored,
+          failed,
           remainingRateLimit: rate.remainingAttempts,
         },
         preview,
+        warnings: warnings.slice(0, 20),
       },
       { status: 200 }
     );

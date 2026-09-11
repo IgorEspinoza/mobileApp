@@ -132,6 +132,8 @@ export async function POST(request: NextRequest) {
     let inserted = 0;
     let duplicated = 0;
     let ignored = 0;
+    let failed = 0;
+    const warnings: string[] = [];
 
     const preview: Array<{
       subject: string;
@@ -142,67 +144,79 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const email of fetched) {
-      const movement = parsePurchaseEmail(email);
+      try {
+        const movement = parsePurchaseEmail(email);
 
-      if (!movement) {
-        ignored += 1;
-        continue;
-      }
+        if (!movement) {
+          ignored += 1;
+          continue;
+        }
 
-      parsed += 1;
+        parsed += 1;
 
-      const subject = (email.subject || "Sin asunto").slice(0, 300);
-      const merchant = (movement.merchant || "Sin comercio").slice(0, 255);
-      const bodySnippet = (movement.snippet || email.body || "").slice(0, 600);
+        const subject = (email.subject || "Sin asunto").slice(0, 300);
+        const merchant = (movement.merchant || "Sin comercio").slice(0, 255);
+        const bodySnippet = (movement.snippet || email.body || "").slice(0, 600);
 
-      const { data: duplicateRow } = await supabaseAdmin
-        .from("expense_classifications")
-        .select("id")
-        .eq("email_import_id", emailImport.id)
-        .eq("subject", subject)
-        .eq("merchant", merchant)
-        .eq("body_snippet", bodySnippet)
-        .maybeSingle();
+        const { data: duplicateRow, error: duplicateError } = await supabaseAdmin
+          .from("expense_classifications")
+          .select("id")
+          .eq("email_import_id", emailImport.id)
+          .eq("subject", subject)
+          .eq("merchant", merchant)
+          .eq("body_snippet", bodySnippet)
+          .maybeSingle();
 
-      if (duplicateRow) {
-        duplicated += 1;
-        continue;
-      }
+        if (duplicateError) {
+          failed += 1;
+          warnings.push(`No se pudo validar duplicado para \"${subject}\": ${duplicateError.message}`);
+          continue;
+        }
 
-      const row = {
-        email_import_id: emailImport.id,
-        subject,
-        body_snippet: bodySnippet,
-        merchant,
-        predicted_category: movement.category,
-        confidence: movement.confidence,
-        manual_category: null,
-        status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
-      };
+        if (duplicateRow) {
+          duplicated += 1;
+          continue;
+        }
 
-      const { error: insertError } = await supabaseAdmin
-        .from("expense_classifications")
-        .insert(row);
-
-      if (insertError) {
-        return NextResponse.json(
-          {
-            error: `Error guardando clasificación para "${subject}": ${insertError.message}`,
-          },
-          { status: 400 }
-        );
-      }
-
-      inserted += 1;
-
-      if (preview.length < 10) {
-        preview.push({
+        const row = {
+          email_import_id: emailImport.id,
           subject,
+          body_snippet: bodySnippet,
           merchant,
-          category: movement.category,
+          predicted_category: movement.category,
           confidence: movement.confidence,
-          status: row.status,
-        });
+          manual_category: null,
+          status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
+        };
+
+        const { error: insertError } = await supabaseAdmin
+          .from("expense_classifications")
+          .insert(row);
+
+        if (insertError) {
+          failed += 1;
+          warnings.push(`No se pudo guardar \"${subject}\": ${insertError.message}`);
+          continue;
+        }
+
+        inserted += 1;
+
+        if (preview.length < 10) {
+          preview.push({
+            subject,
+            merchant,
+            category: movement.category,
+            confidence: movement.confidence,
+            status: row.status,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        warnings.push(
+          `Error procesando \"${email.subject || "Sin asunto"}\": ${
+            error instanceof Error ? error.message : "error desconocido"
+          }`
+        );
       }
     }
 
@@ -222,14 +236,17 @@ export async function POST(request: NextRequest) {
         inserted,
         duplicated,
         ignored,
+        failed,
         remainingRateLimit: rate.remainingAttempts,
       },
       preview,
+      warnings: warnings.slice(0, 20),
     });
   } catch (err) {
     console.error("[email/sync/auto][POST] unexpected error:", err);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
+
 
 
