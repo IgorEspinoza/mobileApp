@@ -21,6 +21,19 @@ export interface EmailReviewItem {
   };
 }
 
+export type ReviewDestination = "expense" | "income" | "installment";
+
+export interface ApprovePayload {
+  destination: ReviewDestination;
+  date: string;
+  amount: number;
+  merchant?: string;
+  category?: string;
+  source?: "salary" | "bonus" | "other";
+  num_installments?: number;
+  description?: string;
+}
+
 interface ListResponse {
   items: EmailReviewItem[];
   total: number;
@@ -35,12 +48,14 @@ export function useEmailReview() {
   const [limit, setLimit] = useState(20);
   const [isLoading, setIsLoading] = useState(false);
   const [isRejectingId, setIsRejectingId] = useState<string | null>(null);
+  const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const fetchPending = useCallback(async (params?: { page?: number; limit?: number; q?: string }) => {
     const nextPage = params?.page ?? page;
     const nextLimit = params?.limit ?? limit;
-    const q = (params?.q || "").trim();
+    const q = (params?.q ?? searchQuery).trim();
 
     try {
       setIsLoading(true);
@@ -69,13 +84,14 @@ export function useEmailReview() {
       setTotal(parsed.total ?? 0);
       setPage(parsed.page ?? nextPage);
       setLimit(parsed.limit ?? nextLimit);
+      setSearchQuery(q);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [limit, page]);
+  }, [limit, page, searchQuery]);
 
   const rejectItem = useCallback(async (id: string) => {
     try {
@@ -104,6 +120,37 @@ export function useEmailReview() {
     }
   }, []);
 
+  const approveItem = useCallback(async (id: string, payload: ApprovePayload) => {
+    try {
+      setIsApprovingId(id);
+      setError(null);
+
+      const res = await fetch(`/api/email/review/${id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al aprobar clasificación");
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error desconocido";
+      setError(message);
+      return false;
+    } finally {
+      setIsApprovingId(null);
+    }
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   return {
     items,
     total,
@@ -111,10 +158,15 @@ export function useEmailReview() {
     limit,
     isLoading,
     isRejectingId,
+    isApprovingId,
+    searchQuery,
+    totalPages,
     error,
     setError,
+    setSearchQuery,
     fetchPending,
     rejectItem,
+    approveItem,
   };
 }
 
