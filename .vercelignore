@@ -1,9 +1,14 @@
-docs/
-supabase/
+# Anclado con "/" para que solo afecte carpetas de la RAIZ
+# (sin la barra inicial tambien matchearia src/lib/supabase/)
+/docs/
+/supabase/
+/setup.bat
+/setup.sh
+
+# Secretos
 .env.local
 .env.production
 .env*.local
-setup.bat
-setup.sh
-*.log
 
+# Logs
+*.log
