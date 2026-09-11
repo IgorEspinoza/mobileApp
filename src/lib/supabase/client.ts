@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import { type SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseEnvAnonKey, getSupabaseEnvUrl } from "./env";
 
 const supabaseUrl = getSupabaseEnvUrl();
@@ -8,6 +9,14 @@ let cachedClient: SupabaseClient | null = null;
 
 /**
  * Crea (una sola vez) el cliente de Supabase para el navegador.
+ *
+ * IMPORTANTE: usamos `createBrowserClient` de `@supabase/ssr` y no
+ * `createClient` de `@supabase/supabase-js`. El login se realiza en el servidor
+ * (`/api/auth/login`), que persiste la sesion en COOKIES. `createClient` guarda
+ * la sesion en localStorage, por lo que el navegador no veia la sesion creada
+ * por el servidor: `getSession()` devolvia null y la UI mostraba
+ * "Usuario / Sin email" ademas de fallar las consultas protegidas por RLS.
+ *
  * Se valida de forma perezosa para no romper el prerender del build
  * cuando las variables aun no estan disponibles.
  */
@@ -19,7 +28,7 @@ export function getSupabaseClient(): SupabaseClient {
   }
 
   if (!cachedClient) {
-    cachedClient = createClient(supabaseUrl, supabaseAnonKey);
+    cachedClient = createBrowserClient(supabaseUrl, supabaseAnonKey);
   }
 
   return cachedClient;
