@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { fetchEmailsFromImap, type FetchedEmail } from "@/lib/email/imap";
+import {
+  fetchEmailsFromImap,
+  resolveImapMailbox,
+  type FetchedEmail,
+} from "@/lib/email/imap";
 import { parsePurchaseEmail } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
@@ -152,6 +156,17 @@ export async function POST(request: NextRequest) {
     }
 
     const cfg = getImapConfig(emailImport.provider);
+    const mailboxResolution = await resolveImapMailbox(
+      {
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        user: emailImport.email_address,
+        password,
+      },
+      mailbox
+    );
+    const resolvedMailbox = mailboxResolution.mailbox;
     // Con `days` explicito ignoramos last_sync y rebarremos la ventana pedida.
     const since = forcedDays ? null : parseDateOrNull(emailImport.last_sync);
     const startedAt = Date.now();
@@ -176,7 +191,7 @@ export async function POST(request: NextRequest) {
           secure: cfg.secure,
           user: emailImport.email_address,
           password,
-          mailbox,
+          mailbox: resolvedMailbox,
           since: since || bootstrapSince,
           limit,
           unseenOnly,
@@ -196,7 +211,7 @@ export async function POST(request: NextRequest) {
         );
       }
       return NextResponse.json(
-        { error: `Error de conexión IMAP (${cfg.host}): ${msg}` },
+        { error: `Error de conexión IMAP (${cfg.host}, buzón "${resolvedMailbox}"): ${msg}` },
         { status: 400 }
       );
     }
@@ -222,7 +237,7 @@ export async function POST(request: NextRequest) {
             secure: cfg.secure,
             user: emailImport.email_address,
             password,
-            mailbox,
+            mailbox: resolvedMailbox,
             since: bootstrapSince,
             limit,
             unseenOnly: false,
@@ -432,6 +447,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: "Sincronización automática completada",
       email_import_id: emailImport.id,
+      mailbox: {
+        requested: mailbox,
+        resolved: resolvedMailbox,
+        matchedBy: mailboxResolution.matchedBy,
+      },
       stats: {
         fetched: fetched.length,
         parsed,

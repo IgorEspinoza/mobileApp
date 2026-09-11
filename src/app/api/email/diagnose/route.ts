@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { fetchEmailsFromImap } from "@/lib/email/imap";
+import { fetchEmailsFromImap, resolveImapMailbox } from "@/lib/email/imap";
 import {
   detectSource,
   htmlToText,
@@ -85,6 +85,17 @@ export async function GET(request: NextRequest) {
     const cfg = getImapConfig(emailImport.provider);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    const mailboxResolution = await resolveImapMailbox(
+      {
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        user: emailImport.email_address,
+        password,
+      },
+      mailbox
+    );
+
     let emails;
     try {
       emails = await fetchEmailsFromImap({
@@ -93,7 +104,7 @@ export async function GET(request: NextRequest) {
         secure: cfg.secure,
         user: emailImport.email_address,
         password,
-        mailbox,
+        mailbox: mailboxResolution.mailbox,
         since,
         limit,
         unseenOnly: false,
@@ -106,7 +117,7 @@ export async function GET(request: NextRequest) {
           hint: /AUTHENTICATIONFAILED|Invalid credentials|LOGIN failed/i.test(msg)
             ? "La App Password es inválida o IMAP está deshabilitado en la cuenta."
             : /NONEXISTENT|Unknown Mailbox|does not exist/i.test(msg)
-              ? `El buzón "${mailbox}" no existe. Prueba con INBOX o "[Gmail]/All Mail".`
+              ? `El buzón "${mailbox}" no existe. Usa la lista de buzones detectados por IMAP para elegir el nombre correcto.`
               : undefined,
         },
         { status: 400 }
@@ -164,7 +175,15 @@ export async function GET(request: NextRequest) {
         imap_host: cfg.host,
         last_sync: emailImport.last_sync,
       },
-      query: { mailbox, days, limit, since: since.toISOString() },
+      query: {
+        requested_mailbox: mailbox,
+        resolved_mailbox: mailboxResolution.mailbox,
+        matched_by: mailboxResolution.matchedBy,
+        days,
+        limit,
+        since: since.toISOString(),
+      },
+      available_mailboxes: mailboxResolution.availableMailboxes,
       summary: {
         fetched: details.length,
         parsed: details.filter((d) => d.parsed).length,

@@ -22,6 +22,15 @@ export interface FetchedEmail {
   date: Date;
 }
 
+export interface ImapMailboxInfo {
+  path: string;
+  name: string;
+  delimiter: string;
+  specialUse: string | null;
+  listed: boolean;
+  subscribed: boolean;
+}
+
 function normalizeAddress(value: string | undefined): string {
   return (value || "").trim().toLowerCase();
 }
@@ -51,13 +60,8 @@ function toDate(value: Date | string | undefined): Date {
   return new Date();
 }
 
-/**
- * Lee correos desde IMAP y devuelve un set normalizado para el parser interno.
- *
- * No marca mensajes como leídos y no modifica flags.
- */
-export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<FetchedEmail[]> {
-  const client = new ImapFlow({
+function createImapClient(options: ImapFetchOptions): ImapFlow {
+  return new ImapFlow({
     host: options.host,
     port: options.port,
     secure: options.secure,
@@ -70,6 +74,150 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
     greetingTimeout: 10_000,
     socketTimeout: 60_000,
   });
+}
+
+async function closeImapClient(client: ImapFlow) {
+  try {
+    await client.logout();
+  } catch {
+    // El cierre limpio es best-effort: no debe tumbar la sincronizacion.
+    client.close();
+  }
+}
+
+function normalizeMailboxName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function pickMailboxByHeuristic(
+  mailboxes: ImapMailboxInfo[],
+  kind: "inbox" | "all" | "spam"
+): ImapMailboxInfo | null {
+  const specialUseCandidates: Record<typeof kind, string[]> = {
+    inbox: ["\\Inbox"],
+    all: ["\\All", "\\Archive"],
+    spam: ["\\Junk"],
+  };
+
+  const nameHints: Record<typeof kind, string[]> = {
+    inbox: ["inbox", "recibidos", "entrada"],
+    all: [
+      "all mail",
+      "allmail",
+      "todos",
+      "todo el correo",
+      "todos los correos",
+      "archiv",
+      "archivo",
+      "archive",
+    ],
+    spam: ["spam", "junk", "correo no deseado", "basura"],
+  };
+
+  for (const specialUse of specialUseCandidates[kind]) {
+    const found = mailboxes.find((mailbox) => mailbox.specialUse === specialUse);
+    if (found) return found;
+  }
+
+  for (const hint of nameHints[kind]) {
+    const found = mailboxes.find((mailbox) => normalizeMailboxName(mailbox.path).includes(hint));
+    if (found) return found;
+  }
+
+  return null;
+}
+
+export async function listImapMailboxes(options: ImapFetchOptions): Promise<ImapMailboxInfo[]> {
+  const client = createImapClient(options);
+  await client.connect();
+
+  try {
+    const list = await client.list();
+
+    return list
+      .filter((mailbox) => mailbox.listed)
+      .map((mailbox) => ({
+        path: mailbox.path,
+        name: mailbox.name,
+        delimiter: mailbox.delimiter,
+        specialUse: mailbox.specialUse ?? null,
+        listed: mailbox.listed,
+        subscribed: mailbox.subscribed,
+      }));
+  } finally {
+    await closeImapClient(client);
+  }
+}
+
+export async function resolveImapMailbox(
+  options: ImapFetchOptions,
+  requestedMailbox?: string
+): Promise<{
+  mailbox: string;
+  availableMailboxes: ImapMailboxInfo[];
+  matchedBy: "exact" | "case-insensitive" | "special-use" | "heuristic" | "default";
+}> {
+  const availableMailboxes = await listImapMailboxes(options);
+  const requested = (requestedMailbox || "INBOX").trim();
+  const normalizedRequested = normalizeMailboxName(requested);
+
+  const exact = availableMailboxes.find((mailbox) => mailbox.path === requested);
+  if (exact) {
+    return { mailbox: exact.path, availableMailboxes, matchedBy: "exact" };
+  }
+
+  const caseInsensitive = availableMailboxes.find(
+    (mailbox) => normalizeMailboxName(mailbox.path) === normalizedRequested
+  );
+  if (caseInsensitive) {
+    return { mailbox: caseInsensitive.path, availableMailboxes, matchedBy: "case-insensitive" };
+  }
+
+  const aliasMap: Record<string, "inbox" | "all" | "spam"> = {
+    __INBOX__: "inbox",
+    INBOX: "inbox",
+    __ALL_MAIL__: "all",
+    "[GMAIL]/ALL MAIL": "all",
+    __SPAM__: "spam",
+    "[GMAIL]/SPAM": "spam",
+  };
+
+  const aliasKey = requested.toUpperCase();
+  const kind = aliasMap[aliasKey];
+
+  if (kind) {
+    const bySpecialUse = pickMailboxByHeuristic(availableMailboxes, kind);
+    if (bySpecialUse) {
+      return {
+        mailbox: bySpecialUse.path,
+        availableMailboxes,
+        matchedBy:
+          bySpecialUse.specialUse && ["\\Inbox", "\\All", "\\Archive", "\\Junk"].includes(bySpecialUse.specialUse)
+            ? "special-use"
+            : "heuristic",
+      };
+    }
+  }
+
+  const fallback = pickMailboxByHeuristic(availableMailboxes, "inbox") ?? availableMailboxes[0];
+  return {
+    mailbox: fallback?.path || "INBOX",
+    availableMailboxes,
+    matchedBy: "default",
+  };
+}
+
+/**
+ * Lee correos desde IMAP y devuelve un set normalizado para el parser interno.
+ *
+ * No marca mensajes como leídos y no modifica flags.
+ */
+export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<FetchedEmail[]> {
+  const client = createImapClient(options);
 
   const mailbox = options.mailbox || "INBOX";
   const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
@@ -137,12 +285,7 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
     return emails;
   } finally {
     lock.release();
-    try {
-      await client.logout();
-    } catch {
-      // El cierre limpio es best-effort: no debe tumbar la sincronizacion.
-      client.close();
-    }
+    await closeImapClient(client);
   }
 }
 

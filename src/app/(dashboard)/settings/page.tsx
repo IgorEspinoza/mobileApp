@@ -33,7 +33,21 @@ interface DiagnoseDetail {
 
 interface DiagnoseResult {
   account: { email_address: string; imap_host: string; last_sync: string | null };
-  query: { mailbox: string; days: number; limit: number };
+  query: {
+    requested_mailbox: string;
+    resolved_mailbox: string;
+    matched_by: string;
+    days: number;
+    limit: number;
+  };
+  available_mailboxes: Array<{
+    path: string;
+    name: string;
+    delimiter: string;
+    specialUse: string | null;
+    listed: boolean;
+    subscribed: boolean;
+  }>;
   summary: {
     fetched: number;
     parsed: number;
@@ -45,6 +59,11 @@ interface DiagnoseResult {
 }
 
 interface SyncResult {
+  mailbox: {
+    requested: string;
+    resolved: string;
+    matchedBy: string;
+  };
   stats: {
     fetched: number;
     parsed: number;
@@ -67,6 +86,19 @@ interface SyncResult {
   warnings: string[];
 }
 
+const RECOMMENDED_MAILBOXES = [
+  { value: "__INBOX__", label: "Automático: Recibidos (INBOX)" },
+  { value: "__ALL_MAIL__", label: "Automático: Todos / All Mail / Archivo" },
+  { value: "__SPAM__", label: "Automático: Spam / Correo no deseado" },
+];
+
+function formatMailboxLabel(path: string, specialUse?: string | null) {
+  if (path === "__INBOX__") return "Automático: Recibidos (INBOX)";
+  if (path === "__ALL_MAIL__") return "Automático: Todos / All Mail / Archivo";
+  if (path === "__SPAM__") return "Automático: Spam / Correo no deseado";
+  return specialUse ? `${path} (${specialUse})` : path;
+}
+
 export default function SettingsPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -77,7 +109,7 @@ export default function SettingsPage() {
   // Diagnóstico
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
-  const [mailbox, setMailbox] = useState("INBOX");
+  const [mailbox, setMailbox] = useState("__INBOX__");
   const [days, setDays] = useState(30);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
@@ -311,7 +343,7 @@ export default function SettingsPage() {
               {config && (
                 <p className="text-xs text-slate-500">
                   La sincronización usa el buzón y el rango de días configurados en el panel de
-                  Diagnóstico (actualmente <strong className="text-slate-400">{mailbox}</strong>, últimos{" "}
+                  Diagnóstico (actualmente <strong className="text-slate-400">{formatMailboxLabel(mailbox)}</strong>, últimos{" "}
                   {days} días).
                 </p>
               )}
@@ -320,6 +352,13 @@ export default function SettingsPage() {
             {syncResult && (
               <div className="space-y-3 rounded-lg border border-slate-700/50 bg-slate-800/40 p-4">
                 <h3 className="text-sm font-semibold text-white">Resultado de la última sincronización</h3>
+
+                <p className="text-xs text-slate-400">
+                  Buzón pedido: <strong className="text-slate-200">{syncResult.mailbox.requested}</strong>
+                  <span className="mx-1">→</span>
+                  usado por IMAP: <strong className="text-slate-200">{syncResult.mailbox.resolved}</strong>
+                  <span className="text-slate-500"> · coincidencia: {syncResult.mailbox.matchedBy}</span>
+                </p>
 
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   {[
@@ -412,9 +451,20 @@ export default function SettingsPage() {
                     onChange={(e) => setMailbox(e.target.value)}
                     className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100"
                   >
-                    <option value="INBOX">INBOX (Recibidos)</option>
-                    <option value="[Gmail]/All Mail">[Gmail]/All Mail (Todos)</option>
-                    <option value="[Gmail]/Spam">[Gmail]/Spam</option>
+                    {RECOMMENDED_MAILBOXES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                    {diagnosis?.available_mailboxes?.length ? (
+                      <optgroup label="Buzones detectados por IMAP">
+                        {diagnosis.available_mailboxes.map((box) => (
+                          <option key={box.path} value={box.path}>
+                            {formatMailboxLabel(box.path, box.specialUse)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
                   </select>
                 </div>
                 <div>
@@ -440,6 +490,13 @@ export default function SettingsPage() {
 
               {diagnosis && (
                 <div className="space-y-4">
+                  <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">
+                    Buzón pedido: <strong>{diagnosis.query.requested_mailbox}</strong>
+                    <br />
+                    Buzón real usado por IMAP: <strong>{diagnosis.query.resolved_mailbox}</strong>
+                    <span className="text-sky-200"> · coincidencia: {diagnosis.query.matched_by}</span>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
                       { label: "Correos leídos", value: diagnosis.summary.fetched },
@@ -456,7 +513,7 @@ export default function SettingsPage() {
 
                   {diagnosis.summary.fetched === 0 && (
                     <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                      No se encontró ningún correo en <strong>{diagnosis.query.mailbox}</strong> en los últimos{" "}
+                      No se encontró ningún correo en <strong>{diagnosis.query.resolved_mailbox}</strong> en los últimos{" "}
                       {diagnosis.query.days} días. Prueba con &quot;[Gmail]/All Mail&quot; o aumenta el rango de días.
                     </p>
                   )}
@@ -499,6 +556,20 @@ export default function SettingsPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  <details className="text-xs text-slate-400">
+                    <summary className="cursor-pointer text-slate-300">
+                      Buzones disponibles ({diagnosis.available_mailboxes.length})
+                    </summary>
+                    <ul className="mt-2 space-y-1 pl-4">
+                      {diagnosis.available_mailboxes.map((box) => (
+                        <li key={box.path}>
+                          {box.path}
+                          {box.specialUse ? <span className="text-slate-500"> ({box.specialUse})</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
 
                   <details className="text-xs text-slate-400">
                     <summary className="cursor-pointer text-slate-300">Remitentes encontrados ({diagnosis.senders.length})</summary>
