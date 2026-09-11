@@ -340,15 +340,25 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     : email.body;
 
   const text = `${email.subject}\n${body}`;
+  const source = detectSource(email.from) ?? "desconocido";
 
   const type = detectType(text);
-  if (!type) return null;
 
   const money = extractAmount(text);
   if (!money) return null;
 
-  const source = detectSource(email.from) ?? "desconocido";
-  const numInstallments = type === "expense" ? extractInstallments(text) : null;
+  let movementType = type;
+  if (!movementType) {
+    // Fallback: si es un correo de banco/billetera con monto, asumimos gasto.
+    // Esto evita perder movimientos reales por no matchear keywords exactas.
+    if (source !== "desconocido") {
+      movementType = "expense";
+    } else {
+      return null;
+    }
+  }
+
+  const numInstallments = movementType === "expense" ? extractInstallments(text) : null;
 
   let merchant = extractMerchant(email.subject, body);
   if (!merchant) {
@@ -362,13 +372,13 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   const sourceBonus = source !== "desconocido" ? 0.05 : 0;
 
   return {
-    type: numInstallments ? "installment" : type,
+    type: numInstallments ? "installment" : movementType,
     merchant,
     amount: money.amount,
     currency: money.currency,
     date: extractDate(text, email.date),
     numInstallments,
-    category: type === "income" ? "Otros" : category,
+    category: movementType === "income" ? "Otros" : category,
     confidence: Math.min(1, Number((confidence + sourceBonus).toFixed(2))),
     source,
     snippet: body.slice(0, 500),

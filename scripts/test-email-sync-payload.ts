@@ -12,6 +12,13 @@ const payload = {
       date: "2026-09-10T13:20:00.000Z",
     },
     {
+      from: "enviodigital@bancochile.cl",
+      to: "igorespinoza10@gmail.com",
+      subject: "Aviso de movimiento",
+      body: "Movimiento por $12.500 en CAFE DEL CENTRO el 10/09/2026.",
+      date: "2026-09-10T15:20:00.000Z",
+    },
+    {
       from: "comunicaciones@bancoestado.cl",
       to: "igorespinoza10@gmail.com",
       subject: "Transferencia recibida",
@@ -46,5 +53,5 @@ for (const email of validated.data.emails) {
   );
 }
 
-console.log(`\nOK: payload valido, ${parsed}/${validated.data.emails.length} correos parseables`);
+  console.log(`\nOK: payload valido, ${parsed}/${validated.data.emails.length} correos parseables`);
 
