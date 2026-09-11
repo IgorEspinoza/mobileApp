@@ -44,6 +44,29 @@ interface DiagnoseResult {
   details: DiagnoseDetail[];
 }
 
+interface SyncResult {
+  stats: {
+    fetched: number;
+    parsed: number;
+    inserted: number;
+    duplicated: number;
+    ignored: number;
+    failed: number;
+    timed_out: boolean;
+    used_bootstrap_fallback: boolean;
+    duration_ms: number;
+  };
+  preview: Array<{
+    subject: string;
+    merchant: string;
+    category: string;
+    confidence: number;
+    status: string;
+  }>;
+  ignored_senders: Array<{ from: string; count: number }>;
+  warnings: string[];
+}
+
 export default function SettingsPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -56,6 +79,7 @@ export default function SettingsPage() {
   const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
   const [mailbox, setMailbox] = useState("INBOX");
   const [days, setDays] = useState(30);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
   // Form states
   const [emailAddress, setEmailAddress] = useState("");
@@ -126,21 +150,25 @@ export default function SettingsPage() {
   const handleTestSync = async () => {
     try {
       setSyncing(true);
-      const res = await fetch("/api/email/sync/auto?limit=10", {
-        method: "POST",
-      });
+      setSyncResult(null);
+      const res = await fetch(
+        `/api/email/sync/auto?limit=30&mailbox=${encodeURIComponent(mailbox)}&days=${days}`,
+        { method: "POST" }
+      );
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(data.error || "Error al sincronizar");
       }
 
+      setSyncResult(data);
+
       const inserted = data.stats?.inserted ?? 0;
       const fetched = data.stats?.fetched ?? 0;
       if (inserted > 0) {
         toast.success(`Sincronización exitosa: ${inserted} nuevo(s) movimiento(s) de ${fetched} correos.`);
       } else if (data.warnings && data.warnings.length > 0) {
-        toast.success(data.warnings[0]);
+        toast.error(data.warnings[0]);
       } else {
         toast.success("Conexión IMAP exitosa, no hay correos bancarios nuevos.");
       }
@@ -275,11 +303,69 @@ export default function SettingsPage() {
                     disabled={syncing}
                     className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {syncing ? "Probando sincronización..." : "Probar sincronización ahora"}
+                    {syncing ? "Sincronizando..." : "Sincronizar ahora"}
                   </button>
                 )}
               </div>
+
+              {config && (
+                <p className="text-xs text-slate-500">
+                  La sincronización usa el buzón y el rango de días configurados en el panel de
+                  Diagnóstico (actualmente <strong className="text-slate-400">{mailbox}</strong>, últimos{" "}
+                  {days} días).
+                </p>
+              )}
             </form>
+
+            {syncResult && (
+              <div className="space-y-3 rounded-lg border border-slate-700/50 bg-slate-800/40 p-4">
+                <h3 className="text-sm font-semibold text-white">Resultado de la última sincronización</h3>
+
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  {[
+                    { label: "Leídos", value: syncResult.stats.fetched },
+                    { label: "Reconocidos", value: syncResult.stats.parsed },
+                    { label: "Guardados", value: syncResult.stats.inserted },
+                    { label: "Duplicados", value: syncResult.stats.duplicated },
+                    { label: "Ignorados", value: syncResult.stats.ignored },
+                    { label: "Fallidos", value: syncResult.stats.failed },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded border border-slate-700/50 bg-slate-900/50 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</p>
+                      <p className="text-lg font-semibold text-white">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-slate-400">
+                  Duración: {(syncResult.stats.duration_ms / 1000).toFixed(1)}s
+                  {syncResult.stats.timed_out && (
+                    <span className="ml-2 text-amber-300">· La lectura IMAP se interrumpió por tiempo</span>
+                  )}
+                  {syncResult.stats.used_bootstrap_fallback && (
+                    <span className="ml-2 text-sky-300">· Se usó búsqueda histórica</span>
+                  )}
+                </p>
+
+                {syncResult.preview.length > 0 && (
+                  <ul className="space-y-1 text-xs text-emerald-300">
+                    {syncResult.preview.map((p, i) => (
+                      <li key={i}>
+                        {p.merchant} · {p.category} · {p.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {syncResult.warnings.length > 0 && (
+                  <ul className="space-y-1 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                    {syncResult.warnings.map((w, i) => (
+                      <li key={i}>• {w}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Guía de requisitos e instrucciones */}

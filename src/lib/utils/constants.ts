@@ -82,11 +82,12 @@ export const SCENARIO_TYPES = ["solo", "shared", "custom"] as const;
 export const EMAIL_PROVIDERS = ["gmail", "outlook"] as const;
 
 // Email Sync Limits
-export const EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS = 30;
-export const EMAIL_SYNC_DEFAULT_LIMIT = 10;
-export const EMAIL_SYNC_MAX_LIMIT = 20;
-export const EMAIL_SYNC_IMAP_TIMEOUT_MS = 12_000;
-export const EMAIL_SYNC_MAX_RUNTIME_MS = 15_000;
+export const EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS = 90;
+export const EMAIL_SYNC_DEFAULT_LIMIT = 15;
+export const EMAIL_SYNC_MAX_LIMIT = 30;
+// Con maxDuration = 60s en la ruta, la lectura IMAP puede tomar hasta 35s.
+export const EMAIL_SYNC_IMAP_TIMEOUT_MS = 35_000;
+export const EMAIL_SYNC_MAX_RUNTIME_MS = 50_000;
 
 // Expense Classification Status
 export const CLASSIFICATION_STATUSES = [
@@ -101,7 +102,7 @@ export const API_RATE_LIMITS = {
   auth: { requests: 10, window: "1m" },
   expenses: { requests: 100, window: "1h" },
   ai: { requests: 20, window: "1h" },
-  email: { requests: 5, window: "1h" },
+  email: { requests: 20, window: "1h" },
 } as const;
 
 // Pagination

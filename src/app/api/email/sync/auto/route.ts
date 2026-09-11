@@ -9,11 +9,14 @@ import {
   EMAIL_SYNC_DEFAULT_LIMIT,
   EMAIL_SYNC_IMAP_TIMEOUT_MS,
   EMAIL_SYNC_MAX_LIMIT,
-  EMAIL_SYNC_MAX_RUNTIME_MS,
 } from "@/lib/utils/constants";
 import { checkRateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
+// Sin esto Vercel corta la funcion a los 10s por defecto: la lectura IMAP mas
+// la escritura en Supabase supera ese limite y el sync moria con 504.
+export const maxDuration = 60;
+
 
 function toMs(window: string): number {
   const match = window.match(/^(\d+)([smhd])$/i);
@@ -101,6 +104,16 @@ export async function POST(request: NextRequest) {
     // envía unseenOnly=true desde la UI o el cliente.
     const unseenOnly = request.nextUrl.searchParams.get("unseenOnly") === "true";
 
+    // Buzon configurable: en Gmail los correos bancarios suelen estar
+    // archivados o filtrados fuera de INBOX ("[Gmail]/All Mail").
+    const mailbox = request.nextUrl.searchParams.get("mailbox") || "INBOX";
+
+    // Permite forzar una ventana historica concreta ignorando last_sync.
+    const daysParam = Number.parseInt(request.nextUrl.searchParams.get("days") || "", 10);
+    const forcedDays = Number.isFinite(daysParam)
+      ? Math.min(Math.max(daysParam, 1), 365)
+      : null;
+
     const { data: emailImport, error: emailImportError } = await supabaseAdmin
       .from("email_imports")
       .select("id, email_address, provider, access_token, last_sync")
@@ -139,10 +152,12 @@ export async function POST(request: NextRequest) {
     }
 
     const cfg = getImapConfig(emailImport.provider);
-    const since = parseDateOrNull(emailImport.last_sync);
+    // Con `days` explicito ignoramos last_sync y rebarremos la ventana pedida.
+    const since = forcedDays ? null : parseDateOrNull(emailImport.last_sync);
     const startedAt = Date.now();
     const bootstrapSince = new Date(
-      Date.now() - EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+      Date.now() -
+        (forcedDays ?? EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS) * 24 * 60 * 60 * 1000
     );
 
     let parsed = 0;
@@ -161,7 +176,7 @@ export async function POST(request: NextRequest) {
           secure: cfg.secure,
           user: emailImport.email_address,
           password,
-          mailbox: "INBOX",
+          mailbox,
           since: since || bootstrapSince,
           limit,
           unseenOnly,
@@ -207,7 +222,7 @@ export async function POST(request: NextRequest) {
             secure: cfg.secure,
             user: emailImport.email_address,
             password,
-            mailbox: "INBOX",
+            mailbox,
             since: bootstrapSince,
             limit,
             unseenOnly: false,
@@ -238,14 +253,20 @@ export async function POST(request: NextRequest) {
 
     const ignoredSenders = new Map<string, number>();
 
-    for (const email of fetched) {
-      if (Date.now() - startedAt > EMAIL_SYNC_MAX_RUNTIME_MS) {
-        warnings.push(
-          "Se alcanzó el tiempo máximo de sincronización. El lote se cortó para evitar timeout."
-        );
-        break;
-      }
+    // 1) Parseo en memoria (sin I/O): decide que correos son movimientos.
+    type Candidate = {
+      email: (typeof fetched)[number];
+      movement: NonNullable<ReturnType<typeof parsePurchaseEmail>>;
+      subject: string;
+      merchant: string;
+      bodySnippet: string;
+      messageId: string | null;
+      status: string;
+    };
 
+    const candidates: Candidate[] = [];
+
+    for (const email of fetched) {
       try {
         const movement = parsePurchaseEmail(email);
 
@@ -257,101 +278,15 @@ export async function POST(request: NextRequest) {
 
         parsed += 1;
 
-        const subject = (email.subject || "Sin asunto").slice(0, 300);
-        const merchant = (movement.merchant || "Sin comercio").slice(0, 255);
-        const bodySnippet = (movement.snippet || email.body || "").slice(0, 600);
-        const messageId = (email.messageId || "").slice(0, 500) || null;
-
-        // Anti-duplicados: primero por Message-ID (identificador unico del
-        // correo). Si no hay Message-ID caemos al match por contenido.
-        let duplicateQuery = supabaseAdmin
-          .from("expense_classifications")
-          .select("id")
-          .eq("email_import_id", emailImport.id);
-
-        duplicateQuery = messageId
-          ? duplicateQuery.eq("message_id", messageId)
-          : duplicateQuery
-              .eq("subject", subject)
-              .eq("merchant", merchant)
-              .eq("body_snippet", bodySnippet);
-
-        const { data: duplicateRow, error: duplicateError } =
-          await duplicateQuery.maybeSingle();
-
-        if (duplicateError) {
-          failed += 1;
-          warnings.push(`No se pudo validar duplicado para \"${subject}\": ${duplicateError.message}`);
-          continue;
-        }
-
-        if (duplicateRow) {
-          duplicated += 1;
-          continue;
-        }
-
-        const status = movement.confidence >= 0.9 ? "auto_classified" : "pending";
-
-        // Columnas base (esquema 001) + columnas de la migracion 005.
-        const baseRow = {
-          email_import_id: emailImport.id,
-          subject,
-          body_snippet: bodySnippet,
-          merchant,
-          predicted_category: movement.category,
-          confidence: movement.confidence,
-          manual_category: null,
-          status,
-        };
-
-        const fullRow = {
-          ...baseRow,
-          // Sin user_id las filas quedan invisibles para las politicas RLS
-          // basadas en usuario y el monto nunca llega a la revision.
-          user_id: user.id,
-          message_id: messageId,
-          amount: movement.amount,
-          currency: movement.currency,
-          transaction_date: movement.date,
-          detected_type: movement.type,
-          num_installments: movement.numInstallments,
-          source: movement.source,
-          from_address: email.from,
-          classified_by: "rules",
-        };
-
-        let { error: insertError } = await supabaseAdmin
-          .from("expense_classifications")
-          .insert(fullRow);
-
-        // Compatibilidad: si la migracion 005 no esta aplicada, reintentamos
-        // con el conjunto minimo de columnas.
-        if (insertError && /column .* does not exist|schema cache/i.test(insertError.message)) {
-          warnings.push(
-            "La migración 005_email_parsing.sql no está aplicada: se guardó el movimiento sin monto ni fecha. Aplícala para tener datos completos."
-          );
-          ({ error: insertError } = await supabaseAdmin
-            .from("expense_classifications")
-            .insert(baseRow));
-        }
-
-        if (insertError) {
-          failed += 1;
-          warnings.push(`No se pudo guardar \"${subject}\": ${insertError.message}`);
-          continue;
-        }
-
-        inserted += 1;
-
-        if (preview.length < 10) {
-          preview.push({
-            subject,
-            merchant,
-            category: movement.category,
-            confidence: movement.confidence,
-            status,
-          });
-        }
+        candidates.push({
+          email,
+          movement,
+          subject: (email.subject || "Sin asunto").slice(0, 300),
+          merchant: (movement.merchant || "Sin comercio").slice(0, 255),
+          bodySnippet: (movement.snippet || email.body || "").slice(0, 600),
+          messageId: (email.messageId || "").slice(0, 500) || null,
+          status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
+        });
       } catch (error) {
         failed += 1;
         warnings.push(
@@ -359,6 +294,107 @@ export async function POST(request: NextRequest) {
             error instanceof Error ? error.message : "error desconocido"
           }`
         );
+      }
+    }
+
+    // 2) Una sola consulta para detectar duplicados (antes eran 2 por correo,
+    //    lo que agotaba el tiempo maximo de la funcion serverless).
+    let newCandidates = candidates;
+
+    if (candidates.length > 0) {
+      const { data: existingRows, error: existingError } = await supabaseAdmin
+        .from("expense_classifications")
+        .select("message_id, subject, merchant")
+        .eq("email_import_id", emailImport.id)
+        .limit(1000);
+
+      if (existingError) {
+        warnings.push(`No se pudo validar duplicados: ${existingError.message}`);
+      } else {
+        const existingMessageIds = new Set(
+          (existingRows ?? [])
+            .map((r) => (r as { message_id: string | null }).message_id)
+            .filter((v): v is string => Boolean(v))
+        );
+        const existingContent = new Set(
+          (existingRows ?? []).map(
+            (r) =>
+              `${(r as { subject: string | null }).subject}|${(r as { merchant: string | null }).merchant}`
+          )
+        );
+
+        newCandidates = candidates.filter((c) => {
+          const isDuplicate = c.messageId
+            ? existingMessageIds.has(c.messageId)
+            : existingContent.has(`${c.subject}|${c.merchant}`);
+
+          if (isDuplicate) duplicated += 1;
+          return !isDuplicate;
+        });
+      }
+    }
+
+    // 3) Insercion en lote (una sola llamada en vez de N).
+    if (newCandidates.length > 0) {
+      const baseRows = newCandidates.map((c) => ({
+        email_import_id: emailImport.id,
+        subject: c.subject,
+        body_snippet: c.bodySnippet,
+        merchant: c.merchant,
+        predicted_category: c.movement.category,
+        confidence: c.movement.confidence,
+        manual_category: null,
+        status: c.status,
+      }));
+
+      const fullRows = newCandidates.map((c, i) => ({
+        ...baseRows[i],
+        // Sin user_id las filas quedan invisibles para las politicas RLS
+        // basadas en usuario y el monto nunca llega a la revision.
+        user_id: user.id,
+        message_id: c.messageId,
+        amount: c.movement.amount,
+        currency: c.movement.currency,
+        transaction_date: c.movement.date,
+        detected_type: c.movement.type,
+        num_installments: c.movement.numInstallments,
+        source: c.movement.source,
+        from_address: c.email.from,
+        classified_by: "rules",
+      }));
+
+      let { data: insertedRows, error: insertError } = await supabaseAdmin
+        .from("expense_classifications")
+        .insert(fullRows)
+        .select("id");
+
+      // Compatibilidad: si la migracion 005 no esta aplicada, reintentamos con
+      // el conjunto minimo de columnas.
+      if (insertError && /column .* does not exist|schema cache/i.test(insertError.message)) {
+        warnings.push(
+          "La migración 005_email_parsing.sql no está aplicada: se guardaron los movimientos sin monto ni fecha. Aplícala en Supabase para tener datos completos."
+        );
+        ({ data: insertedRows, error: insertError } = await supabaseAdmin
+          .from("expense_classifications")
+          .insert(baseRows)
+          .select("id"));
+      }
+
+      if (insertError) {
+        failed += newCandidates.length;
+        warnings.push(`No se pudieron guardar los movimientos: ${insertError.message}`);
+      } else {
+        inserted = insertedRows?.length ?? newCandidates.length;
+
+        for (const c of newCandidates.slice(0, 10)) {
+          preview.push({
+            subject: c.subject,
+            merchant: c.merchant,
+            category: c.movement.category,
+            confidence: c.movement.confidence,
+            status: c.status,
+          });
+        }
       }
     }
 
@@ -405,6 +441,7 @@ export async function POST(request: NextRequest) {
         failed,
         timed_out: imapResult === null,
         used_bootstrap_fallback: usedBootstrapFallback,
+        duration_ms: Date.now() - startedAt,
         remainingRateLimit: rate.remainingAttempts,
       },
       preview,
