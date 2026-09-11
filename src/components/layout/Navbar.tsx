@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/transactions", label: "Transacciones" },
+  { href: "/transactions/review", label: "Revisar correos" },
 ];
 
 export function Navbar() {
