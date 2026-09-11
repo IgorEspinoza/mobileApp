@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { fetchEmailsFromImap } from "@/lib/email/imap";
+import { fetchEmailsFromImap, type FetchedEmail } from "@/lib/email/imap";
 import { parsePurchaseEmail } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
@@ -152,20 +152,39 @@ export async function POST(request: NextRequest) {
     let failed = 0;
     const warnings: string[] = [];
 
-    const imapResult = await withTimeout(
-      fetchEmailsFromImap({
-        host: cfg.host,
-        port: cfg.port,
-        secure: cfg.secure,
-        user: emailImport.email_address,
-        password,
-        mailbox: "INBOX",
-        since: since || bootstrapSince,
-        limit,
-        unseenOnly,
-      }),
-      EMAIL_SYNC_IMAP_TIMEOUT_MS
-    );
+    let imapResult: FetchedEmail[] | null = null;
+    try {
+      imapResult = await withTimeout(
+        fetchEmailsFromImap({
+          host: cfg.host,
+          port: cfg.port,
+          secure: cfg.secure,
+          user: emailImport.email_address,
+          password,
+          mailbox: "INBOX",
+          since: since || bootstrapSince,
+          limit,
+          unseenOnly,
+        }),
+        EMAIL_SYNC_IMAP_TIMEOUT_MS
+      );
+    } catch (imapErr) {
+      console.error("[email/sync/auto] Error conectando a IMAP:", imapErr);
+      const msg = imapErr instanceof Error ? imapErr.message : String(imapErr);
+      if (/authentication failed|invalid credentials|login failed|AUTHENTICATIONFAILED/i.test(msg)) {
+        return NextResponse.json(
+          {
+            error:
+              "Error de autenticación IMAP: Verifica tu correo y que la Contraseña de Aplicación de 16 caracteres de Google/Outlook sea correcta.",
+          },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json(
+        { error: `Error de conexión IMAP (${cfg.host}): ${msg}` },
+        { status: 400 }
+      );
+    }
 
     let fetched = Array.isArray(imapResult) ? imapResult : [];
     let usedBootstrapFallback = false;
@@ -180,27 +199,32 @@ export async function POST(request: NextRequest) {
         `No se encontraron correos desde last_sync. Reintentando con los últimos ${EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS} días.`
       );
 
-      const fallbackResult = await withTimeout(
-        fetchEmailsFromImap({
-          host: cfg.host,
-          port: cfg.port,
-          secure: cfg.secure,
-          user: emailImport.email_address,
-          password,
-          mailbox: "INBOX",
-          since: bootstrapSince,
-          limit,
-          unseenOnly: false,
-        }),
-        EMAIL_SYNC_IMAP_TIMEOUT_MS
-      );
-
-      fetched = Array.isArray(fallbackResult) ? fallbackResult : [];
-
-      if (fallbackResult === null) {
-        warnings.push(
-          "La lectura IMAP del fallback también tardó demasiado y se interrumpió para evitar timeout."
+      try {
+        const fallbackResult = await withTimeout(
+          fetchEmailsFromImap({
+            host: cfg.host,
+            port: cfg.port,
+            secure: cfg.secure,
+            user: emailImport.email_address,
+            password,
+            mailbox: "INBOX",
+            since: bootstrapSince,
+            limit,
+            unseenOnly: false,
+          }),
+          EMAIL_SYNC_IMAP_TIMEOUT_MS
         );
+
+        fetched = Array.isArray(fallbackResult) ? fallbackResult : [];
+
+        if (fallbackResult === null) {
+          warnings.push(
+            "La lectura IMAP del fallback también tardó demasiado y se interrumpió para evitar timeout."
+          );
+        }
+      } catch (fallbackErr) {
+        console.error("[email/sync/auto] Error en fallback IMAP:", fallbackErr);
+        warnings.push("No se pudo completar el reintento histórico de correos.");
       }
     }
 
@@ -303,10 +327,15 @@ export async function POST(request: NextRequest) {
         .update({ last_sync: now })
         .eq("id", emailImport.id)
         .eq("user_id", user.id);
-    } else if (since || usedBootstrapFallback) {
+    } else {
       warnings.push(
-        "No se actualizó last_sync porque no hubo correos leídos; así la próxima sincronización puede volver a intentar histórico."
+        "No se encontraron correos para procesar en la bandeja de entrada (INBOX). Asegúrate de tener correos de compras de bancos soportados (Banco de Chile, Santander, BCI, BancoEstado, Falabella, etc.)."
       );
+      if (since || usedBootstrapFallback) {
+        warnings.push(
+          "No se actualizó last_sync para permitir reintentar correos históricos en la próxima sincronización."
+        );
+      }
     }
 
     return NextResponse.json({

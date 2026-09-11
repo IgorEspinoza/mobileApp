@@ -39,6 +39,19 @@ export function useToast() {
     });
   }, []);
 
-  return { success, error, loading, dismiss: toast.dismiss };
+  const info = useCallback((message: string) => {
+    toast(message, {
+      duration: 3500,
+      position: "top-right",
+      icon: "ℹ️",
+      style: {
+        background: "#1e293b",
+        color: "#fff",
+        borderRadius: "0.5rem",
+      },
+    });
+  }, []);
+
+  return { success, error, loading, info, dismiss: toast.dismiss };
 }
 

@@ -1,24 +1,253 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useToast } from "@/hooks/useToast";
+import { Loading } from "@/components/common/Loading";
+
+interface EmailConfig {
+  id: string;
+  email_address: string;
+  provider: "gmail" | "outlook";
+  last_sync: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export default function SettingsPage() {
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [config, setConfig] = useState<EmailConfig | null>(null);
+
+  // Form states
+  const [emailAddress, setEmailAddress] = useState("");
+  const [provider, setProvider] = useState<"gmail" | "outlook">("gmail");
+  const [appPassword, setAppPassword] = useState("");
+
+  const loadConfig = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/email/config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.configured && data.config) {
+          setConfig(data.config);
+          setEmailAddress(data.config.email_address);
+          setProvider(data.config.provider);
+        }
+      }
+    } catch (err) {
+      console.error("Error al cargar configuración:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailAddress.trim()) {
+      toast.error("Ingresa un correo electrónico");
+      return;
+    }
+    if (!appPassword.trim()) {
+      toast.error("Ingresa tu Contraseña de Aplicación de 16 letras");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const res = await fetch("/api/email/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email_address: emailAddress.trim(),
+          provider,
+          app_password: appPassword.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al guardar");
+      }
+
+      toast.success("Credenciales IMAP guardadas correctamente");
+      setAppPassword("");
+      await loadConfig();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar credenciales");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestSync = async () => {
+    try {
+      setSyncing(true);
+      const res = await fetch("/api/email/sync/auto?limit=10", {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al sincronizar");
+      }
+
+      const inserted = data.stats?.inserted ?? 0;
+      const fetched = data.stats?.fetched ?? 0;
+      if (inserted > 0) {
+        toast.success(`Sincronización exitosa: ${inserted} nuevo(s) movimiento(s) de ${fetched} correos.`);
+      } else if (data.warnings && data.warnings.length > 0) {
+        toast.success(data.warnings[0]);
+      } else {
+        toast.success("Conexión IMAP exitosa, no hay correos bancarios nuevos.");
+      }
+      await loadConfig();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error durante la sincronización");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <section className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-white">Ajustes</h1>
         <p className="mt-2 text-slate-300">
-          Configuración de correo para importación automática (modo manual para ambiguos).
+          Configuración de conexión IMAP para sincronizar tus correos bancarios automáticamente.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-6">
-        <h2 className="text-lg font-semibold text-white">Correo principal</h2>
-        <p className="mt-2 text-sm text-slate-300">
-          Próximo paso: conectar tu correo y definir alias para separar movimientos por usuario.
-        </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-400">
-          <li>Ejemplo alias: <span className="text-slate-200">igorespinoza10+ana@gmail.com</span></li>
-          <li>Los correos ambiguos quedarán en revisión manual.</li>
-          <li>Sin IA para clasificación: costo runtime en tokens = 0.</li>
-        </ul>
-      </div>
+      {loading ? (
+        <Loading text="Cargando ajustes..." />
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Formulario de configuración */}
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-6 lg:col-span-2 space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Conexión de correo (IMAP)</h2>
+              <p className="text-sm text-slate-400 mt-1">
+                La app se conecta de forma segura vía IMAP TLS para leer las notificaciones de tus compras.
+              </p>
+            </div>
+
+            {config ? (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+                <p className="font-medium">
+                  Conexión activa: <span className="text-white">{config.email_address}</span> ({config.provider.toUpperCase()})
+                </p>
+                <p className="text-xs text-slate-300 mt-1">
+                  Última sincronización: {config.last_sync ? new Date(config.last_sync).toLocaleString() : "Nunca"}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                No tienes ninguna cuenta de correo configurada aún. Completa el formulario a continuación para habilitar la sincronización.
+              </div>
+            )}
+
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-200 mb-1">
+                  Proveedor de correo
+                </label>
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as "gmail" | "outlook")}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+                >
+                  <option value="gmail">Gmail / Google Workspace (imap.gmail.com)</option>
+                  <option value="outlook">Outlook / Hotmail / Office 365 (outlook.office365.com)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-200 mb-1">
+                  Dirección de correo
+                </label>
+                <input
+                  type="email"
+                  value={emailAddress}
+                  onChange={(e) => setEmailAddress(e.target.value)}
+                  placeholder="tu_correo@gmail.com"
+                  required
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-200 mb-1">
+                  Contraseña de Aplicación (App Password)
+                </label>
+                <input
+                  type="password"
+                  value={appPassword}
+                  onChange={(e) => setAppPassword(e.target.value)}
+                  placeholder={config ? "Ingresa nueva contraseña para actualizar" : "Ej: abcd efgh ijkl mnop"}
+                  required
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  En Gmail <strong className="text-slate-300">NO</strong> es tu contraseña habitual. Debes generar una contraseña de aplicación de 16 caracteres.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {saving ? "Guardando..." : "Guardar credenciales"}
+                </button>
+
+                {config && (
+                  <button
+                    type="button"
+                    onClick={handleTestSync}
+                    disabled={syncing}
+                    className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {syncing ? "Probando sincronización..." : "Probar sincronización ahora"}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* Guía de requisitos e instrucciones */}
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-white">¿Qué necesitas para Gmail?</h3>
+            <ol className="list-decimal space-y-3 pl-4 text-sm text-slate-300">
+              <li>
+                <strong className="text-white">Verificación en 2 pasos:</strong> Debe estar activada en tu cuenta Google (<a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer" className="text-emerald-400 underline">Seguridad de Google</a>).
+              </li>
+              <li>
+                <strong className="text-white">Habilitar IMAP:</strong> En Gmail Web &gt; Configuración &gt; Ver toda la configuración &gt; pestaña <em>Reenvío y correo POP/IMAP</em> &gt; marcar <strong>Habilitar IMAP</strong> y guardar cambios.
+              </li>
+              <li>
+                <strong className="text-white">Generar Contraseña de Aplicación:</strong>
+                <p className="mt-1 text-xs text-slate-400">
+                  Entra a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-emerald-400 underline">google.com/apppasswords</a>, escribe el nombre "MiDinero" y copia la clave de 16 letras generada para pegarla aquí.
+                </p>
+              </li>
+            </ol>
+
+            <div className="pt-3 border-t border-slate-800">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Bancos detectados</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Banco de Chile, Santander, BCI/Mach, BancoEstado, Itaú, Scotiabank, Falabella, Ripley, Tenpo, Mercado Pago, etc.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

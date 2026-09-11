@@ -127,7 +127,8 @@ export default function EmailReviewPage() {
         toast.success(result.inserted > 0 ? `Sincronización OK: ${result.inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
       }
     } else {
-      toast.error("No se pudo sincronizar el correo automáticamente");
+      const errorMsg = result.warnings?.[0] || error || "No se pudo sincronizar el correo automáticamente";
+      toast.error(errorMsg);
     }
   };
 
