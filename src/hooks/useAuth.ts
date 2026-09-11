@@ -18,6 +18,9 @@ export function useAuth() {
     // cuando la sesión fue creada en servidor y vive en cookies.
     supabase.auth.getUser().then(({ data, error: getUserError }) => {
       if (data.user) {
+        // Mostramos fallback altiro para no dejar la UI en "Sin email" mientras
+        // llega el perfil desde public.users.
+        setUser(buildFallbackProfile(data.user));
         fetchProfile(data.user);
         return;
       }
@@ -38,9 +41,11 @@ export function useAuth() {
         (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") &&
         session?.user
       ) {
+        setUser(buildFallbackProfile(session.user));
         await fetchProfile(session.user);
       } else if (event === "SIGNED_OUT") {
         logout();
+        setLoading(false);
         router.push("/login");
       }
     });
@@ -75,28 +80,35 @@ export function useAuth() {
 
   const fetchProfile = async (authUser: SupabaseAuthUser) => {
     setLoading(true);
+    try {
+      // maybeSingle() no lanza error cuando no hay fila (perfil aún no creado).
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", authUser.id)
+        .maybeSingle();
 
-    // maybeSingle() no lanza error cuando no hay fila (perfil aún no creado).
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", authUser.id)
-      .maybeSingle();
+      if (error) {
+        console.error("Error fetching profile:", error);
+        setError(error.message);
+        setUser(buildFallbackProfile(authUser));
+        return;
+      }
 
-    if (error) {
-      console.error("Error fetching profile:", error);
-      setError(error.message);
-    }
-
-    if (data) {
-      const profile = data as User;
-      // Si el perfil existe pero le falta el email, lo completamos con el de auth.
-      setUser(profile.email ? profile : { ...profile, email: authUser.email ?? "" });
-    } else {
+      if (data) {
+        const profile = data as User;
+        // Si el perfil existe pero le falta el email, lo completamos con el de auth.
+        setUser(profile.email ? profile : { ...profile, email: authUser.email ?? "" });
+      } else {
+        setUser(buildFallbackProfile(authUser));
+      }
+    } catch (err) {
+      console.error("Unexpected fetchProfile error:", err);
+      setError(err instanceof Error ? err.message : "Error al cargar perfil");
       setUser(buildFallbackProfile(authUser));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const login = async (email: string, password: string) => {

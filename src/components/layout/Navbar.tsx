@@ -13,7 +13,7 @@ const NAV_LINKS = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, signOut, isLoading } = useAuth();
+  const { user, signOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -68,8 +68,7 @@ export function Navbar() {
           <button
             type="button"
             onClick={signOut}
-            disabled={isLoading}
-            className="min-h-[40px] rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-[40px] rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
           >
             Salir
           </button>
@@ -108,8 +107,7 @@ export function Navbar() {
           <button
             type="button"
             onClick={signOut}
-            disabled={isLoading}
-            className="mt-4 min-h-[40px] w-full rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-4 min-h-[40px] w-full rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
           >
             Salir
           </button>
