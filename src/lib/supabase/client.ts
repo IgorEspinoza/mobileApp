@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseEnvAnonKey, getSupabaseEnvUrl } from "./env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseUrl = getSupabaseEnvUrl();
+const supabaseAnonKey = getSupabaseEnvAnonKey();
 
 let cachedClient: SupabaseClient | null = null;
 

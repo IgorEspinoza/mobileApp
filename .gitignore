@@ -60,3 +60,6 @@ desktop.ini
 
 # ===== Misc =====
 .cache/
+
+.vercel
+.env*

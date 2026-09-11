@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getSupabaseEnvAnonKey, getSupabaseEnvUrl } from "@/lib/supabase/env";
 
 const PUBLIC_ROUTES = [
   "/",
@@ -21,8 +22,8 @@ export async function middleware(request: NextRequest) {
   }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseEnvUrl(),
+    getSupabaseEnvAnonKey(),
     {
       cookies: {
         getAll() {

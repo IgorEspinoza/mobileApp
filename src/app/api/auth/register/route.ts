@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Crear perfil en tabla users
-    await supabase.from("users").insert({
+    const { error: profileError } = await supabase.from("users").insert({
       id: data.user.id,
       email,
       full_name,
@@ -46,11 +46,17 @@ export async function POST(request: NextRequest) {
       dark_mode: false,
     });
 
+    if (profileError) {
+      console.error("[register] profile insert error:", profileError);
+    }
+
     return NextResponse.json(
       { user: { id: data.user.id, email: data.user.email }, message: "Usuario creado exitosamente" },
       { status: 201 }
     );
-  } catch {
+  } catch (err) {
+    console.error("[register] unexpected error:", err);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
+

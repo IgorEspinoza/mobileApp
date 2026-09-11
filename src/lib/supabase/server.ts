@@ -1,11 +1,18 @@
 import { createServerClient as createSSRServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getSupabaseEnvAnonKey, getSupabaseEnvUrl } from "./env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = getSupabaseEnvUrl();
+const supabaseAnonKey = getSupabaseEnvAnonKey();
 
 // Para Route Handlers y Server Components (Next.js App Router)
 export const createServerClient = async () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY)"
+    );
+  }
+
   const cookieStore = await cookies();
   return createSSRServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -24,3 +31,4 @@ export const createServerClient = async () => {
     },
   });
 };
+
