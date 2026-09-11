@@ -157,7 +157,9 @@ export function useEmailReview() {
 
       const search = new URLSearchParams();
       if (params?.limit) search.set("limit", String(params.limit));
-      if (params?.unseenOnly === false) search.set("unseenOnly", "false");
+      if (typeof params?.unseenOnly === "boolean") {
+        search.set("unseenOnly", params.unseenOnly ? "true" : "false");
+      }
 
       const qs = search.toString();
       const res = await fetch(`/api/email/sync/auto${qs ? `?${qs}` : ""}`, {

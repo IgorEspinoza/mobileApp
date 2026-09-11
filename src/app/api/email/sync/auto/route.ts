@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
       100
     );
 
-    const unseenOnly = request.nextUrl.searchParams.get("unseenOnly") !== "false";
+    // Por defecto sincronizamos todos los correos. Si quieres solo no leídos,
+    // envía unseenOnly=true desde la UI o el cliente.
+    const unseenOnly = request.nextUrl.searchParams.get("unseenOnly") === "true";
 
     const { data: emailImport, error: emailImportError } = await supabaseAdmin
       .from("email_imports")
@@ -247,6 +249,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
+
 
 
 

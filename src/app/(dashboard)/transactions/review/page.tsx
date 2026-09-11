@@ -117,7 +117,7 @@ export default function EmailReviewPage() {
   };
 
   const handleSyncAuto = async () => {
-    const inserted = await syncAuto({ limit: 30, unseenOnly: true });
+    const inserted = await syncAuto({ limit: 30 });
     if (inserted >= 0) {
       toast.success(inserted > 0 ? `Sincronización OK: ${inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
     } else {
