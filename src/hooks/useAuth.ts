@@ -14,20 +14,30 @@ export function useAuth() {
 
   // Escuchar cambios de sesión de Supabase
   useEffect(() => {
-    // Obtener sesión actual
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchProfile(session.user);
-      } else {
-        setLoading(false);
+    // Cargar usuario actual. `getUser()` es más confiable que `getSession()`
+    // cuando la sesión fue creada en servidor y vive en cookies.
+    supabase.auth.getUser().then(({ data, error: getUserError }) => {
+      if (data.user) {
+        fetchProfile(data.user);
+        return;
       }
+
+      if (getUserError) {
+        setError(getUserError.message);
+      }
+
+      setUser(null);
+      setLoading(false);
     });
 
     // Suscribirse a cambios de auth
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+      if (
+        (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") &&
+        session?.user
+      ) {
         await fetchProfile(session.user);
       } else if (event === "SIGNED_OUT") {
         logout();
