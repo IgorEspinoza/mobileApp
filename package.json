@@ -11,6 +11,7 @@
     "type-check": "tsc --noEmit",
     "verify": "npm run type-check",
     "format": "prettier --write \"src/**/*.{ts,tsx,json}\"",
+    "test:shared-split": "npx --yes tsx scripts/test-shared-split.ts",
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
     "db:seed": "supabase db seed"
