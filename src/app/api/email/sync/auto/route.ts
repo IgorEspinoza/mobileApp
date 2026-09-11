@@ -3,7 +3,13 @@ import { createServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { fetchEmailsFromImap } from "@/lib/email/imap";
 import { parsePurchaseEmail } from "@/lib/email/parser";
-import { API_RATE_LIMITS } from "@/lib/utils/constants";
+import {
+  API_RATE_LIMITS,
+  EMAIL_SYNC_DEFAULT_LIMIT,
+  EMAIL_SYNC_IMAP_TIMEOUT_MS,
+  EMAIL_SYNC_MAX_LIMIT,
+  EMAIL_SYNC_MAX_RUNTIME_MS,
+} from "@/lib/utils/constants";
 import { checkRateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
@@ -33,6 +39,19 @@ function parseDateOrNull(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  return Promise.race([
+    promise.finally(() => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    }),
+    new Promise<null>((resolve) => {
+      timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
 }
 
 export async function POST(request: NextRequest) {
@@ -70,8 +89,11 @@ export async function POST(request: NextRequest) {
     }
 
     const limit = Math.min(
-      Math.max(Number.parseInt(request.nextUrl.searchParams.get("limit") || "25", 10), 1),
-      100
+      Math.max(
+        Number.parseInt(request.nextUrl.searchParams.get("limit") || String(EMAIL_SYNC_DEFAULT_LIMIT), 10),
+        1
+      ),
+      EMAIL_SYNC_MAX_LIMIT
     );
 
     // Por defecto sincronizamos todos los correos. Si quieres solo no leídos,
@@ -117,18 +139,7 @@ export async function POST(request: NextRequest) {
 
     const cfg = getImapConfig(emailImport.provider);
     const since = parseDateOrNull(emailImport.last_sync);
-
-    const fetched = await fetchEmailsFromImap({
-      host: cfg.host,
-      port: cfg.port,
-      secure: cfg.secure,
-      user: emailImport.email_address,
-      password,
-      mailbox: "INBOX",
-      since: since || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      limit,
-      unseenOnly,
-    });
+    const startedAt = Date.now();
 
     let parsed = 0;
     let inserted = 0;
@@ -136,6 +147,28 @@ export async function POST(request: NextRequest) {
     let ignored = 0;
     let failed = 0;
     const warnings: string[] = [];
+
+    const imapResult = await withTimeout(
+      fetchEmailsFromImap({
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        user: emailImport.email_address,
+        password,
+        mailbox: "INBOX",
+        since: since || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        limit,
+        unseenOnly,
+      }),
+      EMAIL_SYNC_IMAP_TIMEOUT_MS
+    );
+
+    const fetched = Array.isArray(imapResult) ? imapResult : [];
+    if (imapResult === null) {
+      warnings.push(
+        "La lectura IMAP tardó demasiado y se interrumpió para evitar timeout. Intenta con menos correos o revisa la credencial IMAP."
+      );
+    }
 
     const preview: Array<{
       subject: string;
@@ -146,6 +179,13 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const email of fetched) {
+      if (Date.now() - startedAt > EMAIL_SYNC_MAX_RUNTIME_MS) {
+        warnings.push(
+          "Se alcanzó el tiempo máximo de sincronización. El lote se cortó para evitar timeout."
+        );
+        break;
+      }
+
       try {
         const movement = parsePurchaseEmail(email);
 
@@ -239,6 +279,7 @@ export async function POST(request: NextRequest) {
         duplicated,
         ignored,
         failed,
+        timed_out: imapResult === null,
         remainingRateLimit: rate.remainingAttempts,
       },
       preview,

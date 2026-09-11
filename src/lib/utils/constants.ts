@@ -81,6 +81,12 @@ export const SCENARIO_TYPES = ["solo", "shared", "custom"] as const;
 // Email Provider Types
 export const EMAIL_PROVIDERS = ["gmail", "outlook"] as const;
 
+// Email Sync Limits
+export const EMAIL_SYNC_DEFAULT_LIMIT = 10;
+export const EMAIL_SYNC_MAX_LIMIT = 20;
+export const EMAIL_SYNC_IMAP_TIMEOUT_MS = 12_000;
+export const EMAIL_SYNC_MAX_RUNTIME_MS = 15_000;
+
 // Expense Classification Status
 export const CLASSIFICATION_STATUSES = [
   "pending",
@@ -111,4 +117,5 @@ export const CACHE_TIMES = {
   homes: 300, // 5 minutes
   goals: 600, // 10 minutes
 } as const;
+
 

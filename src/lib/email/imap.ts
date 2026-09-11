@@ -68,7 +68,7 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
   });
 
   const mailbox = options.mailbox || "INBOX";
-  const limit = Math.max(1, Math.min(options.limit ?? 30, 200));
+  const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
   const unseenOnly = options.unseenOnly ?? true;
 
   await client.connect();
@@ -128,6 +128,7 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
     await client.logout();
   }
 }
+
 
 
 
