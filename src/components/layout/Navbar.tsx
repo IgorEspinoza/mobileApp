@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/transactions", label: "Transacciones" },
   { href: "/transactions/review", label: "Revisar correos" },
+  { href: "/settings", label: "Ajustes" },
 ];
 
 export function Navbar() {
