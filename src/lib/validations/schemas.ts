@@ -235,6 +235,21 @@ export const ApproveEmailClassificationSchema = z.object({
   }
 });
 
+export const SyncEmailSchema = z.object({
+  email_import_id: z.string().uuid().optional(),
+  dry_run: z.boolean().default(false),
+  emails: z.array(
+    z.object({
+      messageId: z.string().min(1).optional(),
+      from: z.string().email("Email de origen inválido"),
+      to: z.string().email("Email destino inválido").optional(),
+      subject: z.string().default(""),
+      body: z.string().min(1, "El cuerpo del correo es requerido"),
+      date: z.string().datetime().optional(),
+    })
+  ).min(1, "Debes enviar al menos un correo para sincronizar"),
+});
+
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type UpdatePasswordInput = z.infer<typeof UpdatePasswordSchema>;
@@ -247,4 +262,5 @@ export type CreateInstallmentInput = z.infer<typeof CreateInstallmentSchema>;
 export type CreateHomeInput = z.infer<typeof CreateHomeSchema>;
 export type InviteToHomeInput = z.infer<typeof InviteToHomeSchema>;
 export type ApproveEmailClassificationInput = z.infer<typeof ApproveEmailClassificationSchema>;
+export type SyncEmailInput = z.infer<typeof SyncEmailSchema>;
 

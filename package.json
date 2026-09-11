@@ -12,6 +12,7 @@
     "verify": "npm run type-check",
     "format": "prettier --write \"src/**/*.{ts,tsx,json}\"",
     "test:shared-split": "npx --yes tsx scripts/test-shared-split.ts",
+    "test:email-sync-payload": "npx --yes tsx scripts/test-email-sync-payload.ts",
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
     "db:seed": "supabase db seed"
