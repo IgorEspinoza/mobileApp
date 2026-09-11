@@ -49,6 +49,7 @@ export function useEmailReview() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRejectingId, setIsRejectingId] = useState<string | null>(null);
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -149,6 +150,40 @@ export function useEmailReview() {
     }
   }, []);
 
+  const syncAuto = useCallback(async (params?: { limit?: number; unseenOnly?: boolean }) => {
+    try {
+      setIsSyncing(true);
+      setError(null);
+
+      const search = new URLSearchParams();
+      if (params?.limit) search.set("limit", String(params.limit));
+      if (params?.unseenOnly === false) search.set("unseenOnly", "false");
+
+      const qs = search.toString();
+      const res = await fetch(`/api/email/sync/auto${qs ? `?${qs}` : ""}`, {
+        method: "POST",
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        stats?: { inserted?: number };
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al sincronizar correos");
+      }
+
+      await fetchPending({ page: 1 });
+      return data.stats?.inserted ?? 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error desconocido";
+      setError(message);
+      return -1;
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [fetchPending]);
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return {
@@ -159,12 +194,14 @@ export function useEmailReview() {
     isLoading,
     isRejectingId,
     isApprovingId,
+    isSyncing,
     searchQuery,
     totalPages,
     error,
     setError,
     setSearchQuery,
     fetchPending,
+    syncAuto,
     rejectItem,
     approveItem,
   };

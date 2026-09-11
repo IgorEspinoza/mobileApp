@@ -29,7 +29,9 @@
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
     "framer-motion": "^10.16.0",
+    "imapflow": "^2.0.2",
     "lucide-react": "^0.290.0",
+    "mailparser": "^3.9.25",
     "next": "^15.0.0",
     "openai": "^4.20.0",
     "react": "^19.0.0",
@@ -44,6 +46,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.12",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
@@ -60,4 +63,3 @@
     "node": ">=18.17.0"
   }
 }
-

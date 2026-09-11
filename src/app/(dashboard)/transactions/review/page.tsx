@@ -42,9 +42,11 @@ export default function EmailReviewPage() {
     isLoading,
     isRejectingId,
     isApprovingId,
+    isSyncing,
     searchQuery,
     error,
     fetchPending,
+    syncAuto,
     rejectItem,
     approveItem,
     setSearchQuery,
@@ -114,6 +116,15 @@ export default function EmailReviewPage() {
     await fetchPending({ page: 1, q: searchQuery });
   };
 
+  const handleSyncAuto = async () => {
+    const inserted = await syncAuto({ limit: 30, unseenOnly: true });
+    if (inserted >= 0) {
+      toast.success(inserted > 0 ? `Sincronización OK: ${inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
+    } else {
+      toast.error("No se pudo sincronizar el correo automáticamente");
+    }
+  };
+
   const goPage = async (nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     await fetchPending({ page: nextPage });
@@ -154,6 +165,14 @@ export default function EmailReviewPage() {
               className="inline-flex min-h-[40px] items-center rounded-lg border border-slate-600 px-3 py-2.5 text-sm text-slate-100 transition-colors hover:border-slate-400 hover:bg-slate-800"
             >
               Buscar
+            </button>
+            <button
+              type="button"
+              onClick={handleSyncAuto}
+              disabled={isSyncing}
+              className="inline-flex min-h-[40px] items-center rounded-lg border border-emerald-500/50 px-3 py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSyncing ? "Sincronizando..." : "Sincronizar correo"}
             </button>
             <button
               type="button"
