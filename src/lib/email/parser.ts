@@ -293,7 +293,7 @@ const IGNORE_HINTS = [
   "estado de cuenta", "newsletter", "promocion", "oferta", "concurso",
   "encuesta", "clave", "contrasena", "bloqueo", "phishing",
   "saldo disponible", "cupo disponible", "recordatorio de pago",
-  "proximo vencimiento",
+  "proximo vencimiento", "kino", "loto", "sorteo", "apuesta", "jackpot",
 ];
 
 type MovementType = "expense" | "income" | "installment" | null;

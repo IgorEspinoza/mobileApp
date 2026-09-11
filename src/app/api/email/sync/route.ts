@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parsePurchaseEmail } from "@/lib/email/parser";
 import { API_RATE_LIMITS } from "@/lib/utils/constants";
 import { checkRateLimit } from "@/lib/utils/rateLimit";
@@ -28,6 +29,7 @@ function toMs(window: string): number {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient();
+    const supabaseAdmin = getSupabaseAdmin();
     const {
       data: { user },
       error: authError,
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
     let emailImportId = payload.email_import_id;
 
     if (!emailImportId) {
-      const { data: firstImport, error: importError } = await supabase
+      const { data: firstImport, error: importError } = await supabaseAdmin
         .from("email_imports")
         .select("id")
         .eq("user_id", user.id)
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
 
       emailImportId = firstImport.id;
     } else {
-      const { data: ownedImport, error: ownedImportError } = await supabase
+      const { data: ownedImport, error: ownedImportError } = await supabaseAdmin
         .from("email_imports")
         .select("id")
         .eq("id", emailImportId)
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest) {
       const bodySnippet = (result.snippet || email.body || "").slice(0, 600);
 
       // Deduplicado básico compatible con esquema actual (sin depender de migration 005).
-      const { data: duplicateRow } = await supabase
+      const { data: duplicateRow } = await supabaseAdmin
         .from("expense_classifications")
         .select("id")
         .eq("email_import_id", emailImportId)
@@ -180,7 +182,7 @@ export async function POST(request: NextRequest) {
       };
 
       if (!payload.dry_run) {
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseAdmin
           .from("expense_classifications")
           .insert(row);
 

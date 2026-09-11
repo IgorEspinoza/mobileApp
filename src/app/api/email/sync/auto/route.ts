@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { fetchEmailsFromImap } from "@/lib/email/imap";
 import { parsePurchaseEmail } from "@/lib/email/parser";
 import { API_RATE_LIMITS } from "@/lib/utils/constants";
@@ -37,6 +38,7 @@ function parseDateOrNull(value: string | null): Date | null {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerClient();
+    const supabaseAdmin = getSupabaseAdmin();
     const {
       data: { user },
       error: authError,
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const unseenOnly = request.nextUrl.searchParams.get("unseenOnly") !== "false";
 
-    const { data: emailImport, error: emailImportError } = await supabase
+    const { data: emailImport, error: emailImportError } = await supabaseAdmin
       .from("email_imports")
       .select("id, email_address, provider, access_token, last_sync")
       .eq("user_id", user.id)
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
       const merchant = (movement.merchant || "Sin comercio").slice(0, 255);
       const bodySnippet = (movement.snippet || email.body || "").slice(0, 600);
 
-      const { data: duplicateRow } = await supabase
+      const { data: duplicateRow } = await supabaseAdmin
         .from("expense_classifications")
         .select("id")
         .eq("email_import_id", emailImport.id)
@@ -178,7 +180,7 @@ export async function POST(request: NextRequest) {
         status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
       };
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await supabaseAdmin
         .from("expense_classifications")
         .insert(row);
 
@@ -205,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    await supabase
+    await supabaseAdmin
       .from("email_imports")
       .update({ last_sync: now })
       .eq("id", emailImport.id)
@@ -229,4 +231,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
+
 
