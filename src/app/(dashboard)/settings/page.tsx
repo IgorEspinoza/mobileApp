@@ -13,12 +13,49 @@ interface EmailConfig {
   created_at: string;
 }
 
+interface DiagnoseDetail {
+  date: string;
+  from: string;
+  subject: string;
+  detected_source: string | null;
+  parsed: boolean;
+  reason: string;
+  movement: {
+    type: string;
+    merchant: string;
+    amount: number;
+    currency: string;
+    date: string;
+    category: string;
+    confidence: number;
+  } | null;
+}
+
+interface DiagnoseResult {
+  account: { email_address: string; imap_host: string; last_sync: string | null };
+  query: { mailbox: string; days: number; limit: number };
+  summary: {
+    fetched: number;
+    parsed: number;
+    from_known_bank: number;
+    discarded: number;
+  };
+  senders: Array<{ from: string; count: number }>;
+  details: DiagnoseDetail[];
+}
+
 export default function SettingsPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [config, setConfig] = useState<EmailConfig | null>(null);
+
+  // Diagnóstico
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
+  const [mailbox, setMailbox] = useState("INBOX");
+  const [days, setDays] = useState(30);
 
   // Form states
   const [emailAddress, setEmailAddress] = useState("");
@@ -112,6 +149,30 @@ export default function SettingsPage() {
       toast.error(err instanceof Error ? err.message : "Error durante la sincronización");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleDiagnose = async () => {
+    try {
+      setDiagnosing(true);
+      setDiagnosis(null);
+      const res = await fetch(
+        `/api/email/diagnose?mailbox=${encodeURIComponent(mailbox)}&days=${days}&limit=25`
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.hint ? `${data.error} — ${data.hint}` : data.error);
+      }
+
+      setDiagnosis(data);
+      toast.success(
+        `Diagnóstico: ${data.summary.fetched} correos leídos, ${data.summary.parsed} reconocidos como movimiento.`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error en el diagnóstico");
+    } finally {
+      setDiagnosing(false);
     }
   };
 
@@ -246,6 +307,127 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+
+          {/* Diagnóstico de sincronización */}
+          {config && (
+            <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-6 lg:col-span-3 space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Diagnóstico de sincronización</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Lee tu buzón sin guardar nada y muestra, correo por correo, si el parser lo reconoce y por qué lo descarta.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Buzón</label>
+                  <select
+                    value={mailbox}
+                    onChange={(e) => setMailbox(e.target.value)}
+                    className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+                  >
+                    <option value="INBOX">INBOX (Recibidos)</option>
+                    <option value="[Gmail]/All Mail">[Gmail]/All Mail (Todos)</option>
+                    <option value="[Gmail]/Spam">[Gmail]/Spam</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Últimos días</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={days}
+                    onChange={(e) => setDays(Number(e.target.value))}
+                    className="w-24 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiagnose}
+                  disabled={diagnosing}
+                  className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+                >
+                  {diagnosing ? "Analizando buzón..." : "Ejecutar diagnóstico"}
+                </button>
+              </div>
+
+              {diagnosis && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      { label: "Correos leídos", value: diagnosis.summary.fetched },
+                      { label: "De bancos conocidos", value: diagnosis.summary.from_known_bank },
+                      { label: "Reconocidos", value: diagnosis.summary.parsed },
+                      { label: "Descartados", value: diagnosis.summary.discarded },
+                    ].map((s) => (
+                      <div key={s.label} className="rounded-lg border border-slate-700/50 bg-slate-800/50 p-3">
+                        <p className="text-xs text-slate-400">{s.label}</p>
+                        <p className="text-2xl font-semibold text-white">{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {diagnosis.summary.fetched === 0 && (
+                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                      No se encontró ningún correo en <strong>{diagnosis.query.mailbox}</strong> en los últimos{" "}
+                      {diagnosis.query.days} días. Prueba con &quot;[Gmail]/All Mail&quot; o aumenta el rango de días.
+                    </p>
+                  )}
+
+                  {diagnosis.summary.fetched > 0 && diagnosis.summary.from_known_bank === 0 && (
+                    <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                      Ningún correo proviene de un dominio bancario reconocido. Revisa la lista de remitentes de abajo:
+                      si tu banco aparece con otro dominio, hay que agregarlo al parser.
+                    </p>
+                  )}
+
+                  <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+                    <table className="min-w-full text-left text-xs">
+                      <thead className="bg-slate-800/70 text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Remitente</th>
+                          <th className="px-3 py-2 font-medium">Asunto</th>
+                          <th className="px-3 py-2 font-medium">Banco</th>
+                          <th className="px-3 py-2 font-medium">Resultado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {diagnosis.details.map((d, i) => (
+                          <tr key={i} className={d.parsed ? "bg-emerald-500/5" : ""}>
+                            <td className="px-3 py-2 text-slate-400 max-w-[200px] truncate">{d.from}</td>
+                            <td className="px-3 py-2 text-slate-200 max-w-[280px] truncate">{d.subject}</td>
+                            <td className="px-3 py-2 text-slate-400">{d.detected_source ?? "—"}</td>
+                            <td className="px-3 py-2">
+                              {d.movement ? (
+                                <span className="text-emerald-300">
+                                  {d.movement.merchant} · ${d.movement.amount.toLocaleString("es-CL")} ·{" "}
+                                  {d.movement.category}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">{d.reason}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <details className="text-xs text-slate-400">
+                    <summary className="cursor-pointer text-slate-300">Remitentes encontrados ({diagnosis.senders.length})</summary>
+                    <ul className="mt-2 space-y-1 pl-4">
+                      {diagnosis.senders.map((s) => (
+                        <li key={s.from}>
+                          {s.from} <span className="text-slate-500">({s.count})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>

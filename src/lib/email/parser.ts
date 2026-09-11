@@ -129,11 +129,31 @@ const AMOUNT_PATTERNS: RegExp[] = [
   /(?:CLP|USD|UF)\s*\$?\s*([\d.,]+)/i,
 ];
 
+/**
+ * Frases cuyo monto NO es el de la transaccion (saldos, cupos, limites).
+ * Se eliminan del texto antes de buscar el importe para no confundir, por
+ * ejemplo, "Saldo disponible $500.000" con el valor de la compra.
+ */
+const NON_TRANSACTION_AMOUNT_PATTERNS: RegExp[] = [
+  /(?:saldo|cupo|l[ií]mite|linea|l[ií]nea)\s+(?:disponible|total|actual|utilizado|de\s+cr[eé]dito)?\s*:?\s*\$?\s*[\d.,]+/gi,
+  /(?:saldo|cupo)\s*:?\s*\$?\s*[\d.,]+/gi,
+  /(?:deuda|total\s+facturado|pago\s+m[ií]nimo)\s*:?\s*\$?\s*[\d.,]+/gi,
+];
+
+function stripNonTransactionAmounts(text: string): string {
+  let cleaned = text;
+  for (const pattern of NON_TRANSACTION_AMOUNT_PATTERNS) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+  return cleaned;
+}
+
 function extractAmount(text: string): { amount: number; currency: string } | null {
   const currency = /US\$|USD|dolar/i.test(text) ? "USD" : "CLP";
+  const searchable = stripNonTransactionAmounts(text);
 
   for (const pattern of AMOUNT_PATTERNS) {
-    const match = text.match(pattern);
+    const match = searchable.match(pattern);
     if (!match?.[1]) continue;
 
     const amount = parseAmount(match[1]);
@@ -298,10 +318,18 @@ const IGNORE_HINTS = [
 
 type MovementType = "expense" | "income" | "installment" | null;
 
+/**
+ * Correos informativos o promocionales que nunca son un movimiento, aunque
+ * vengan de un banco reconocido (estados de cuenta, saldos, promociones).
+ */
+function isIgnorable(text: string): boolean {
+  const normalized = normalizeText(text);
+  return IGNORE_HINTS.some((hint) => normalized.includes(hint));
+}
+
 function detectType(text: string): MovementType {
   const normalized = normalizeText(text);
 
-  if (IGNORE_HINTS.some((hint) => normalized.includes(hint))) return null;
   if (INCOME_HINTS.some((hint) => normalized.includes(hint))) return "income";
   if (EXPENSE_HINTS.some((hint) => normalized.includes(hint))) return "expense";
 
@@ -341,6 +369,10 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
 
   const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
+
+  // Un correo informativo (estado de cuenta, saldo, promocion) nunca es un
+  // movimiento, aunque venga de un banco reconocido.
+  if (isIgnorable(text)) return null;
 
   const type = detectType(text);
 

@@ -236,6 +236,8 @@ export async function POST(request: NextRequest) {
       status: string;
     }> = [];
 
+    const ignoredSenders = new Map<string, number>();
+
     for (const email of fetched) {
       if (Date.now() - startedAt > EMAIL_SYNC_MAX_RUNTIME_MS) {
         warnings.push(
@@ -249,6 +251,7 @@ export async function POST(request: NextRequest) {
 
         if (!movement) {
           ignored += 1;
+          ignoredSenders.set(email.from, (ignoredSenders.get(email.from) || 0) + 1);
           continue;
         }
 
@@ -257,15 +260,24 @@ export async function POST(request: NextRequest) {
         const subject = (email.subject || "Sin asunto").slice(0, 300);
         const merchant = (movement.merchant || "Sin comercio").slice(0, 255);
         const bodySnippet = (movement.snippet || email.body || "").slice(0, 600);
+        const messageId = (email.messageId || "").slice(0, 500) || null;
 
-        const { data: duplicateRow, error: duplicateError } = await supabaseAdmin
+        // Anti-duplicados: primero por Message-ID (identificador unico del
+        // correo). Si no hay Message-ID caemos al match por contenido.
+        let duplicateQuery = supabaseAdmin
           .from("expense_classifications")
           .select("id")
-          .eq("email_import_id", emailImport.id)
-          .eq("subject", subject)
-          .eq("merchant", merchant)
-          .eq("body_snippet", bodySnippet)
-          .maybeSingle();
+          .eq("email_import_id", emailImport.id);
+
+        duplicateQuery = messageId
+          ? duplicateQuery.eq("message_id", messageId)
+          : duplicateQuery
+              .eq("subject", subject)
+              .eq("merchant", merchant)
+              .eq("body_snippet", bodySnippet);
+
+        const { data: duplicateRow, error: duplicateError } =
+          await duplicateQuery.maybeSingle();
 
         if (duplicateError) {
           failed += 1;
@@ -278,7 +290,10 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const row = {
+        const status = movement.confidence >= 0.9 ? "auto_classified" : "pending";
+
+        // Columnas base (esquema 001) + columnas de la migracion 005.
+        const baseRow = {
           email_import_id: emailImport.id,
           subject,
           body_snippet: bodySnippet,
@@ -286,12 +301,39 @@ export async function POST(request: NextRequest) {
           predicted_category: movement.category,
           confidence: movement.confidence,
           manual_category: null,
-          status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
+          status,
         };
 
-        const { error: insertError } = await supabaseAdmin
+        const fullRow = {
+          ...baseRow,
+          // Sin user_id las filas quedan invisibles para las politicas RLS
+          // basadas en usuario y el monto nunca llega a la revision.
+          user_id: user.id,
+          message_id: messageId,
+          amount: movement.amount,
+          currency: movement.currency,
+          transaction_date: movement.date,
+          detected_type: movement.type,
+          num_installments: movement.numInstallments,
+          source: movement.source,
+          from_address: email.from,
+          classified_by: "rules",
+        };
+
+        let { error: insertError } = await supabaseAdmin
           .from("expense_classifications")
-          .insert(row);
+          .insert(fullRow);
+
+        // Compatibilidad: si la migracion 005 no esta aplicada, reintentamos
+        // con el conjunto minimo de columnas.
+        if (insertError && /column .* does not exist|schema cache/i.test(insertError.message)) {
+          warnings.push(
+            "La migración 005_email_parsing.sql no está aplicada: se guardó el movimiento sin monto ni fecha. Aplícala para tener datos completos."
+          );
+          ({ error: insertError } = await supabaseAdmin
+            .from("expense_classifications")
+            .insert(baseRow));
+        }
 
         if (insertError) {
           failed += 1;
@@ -307,7 +349,7 @@ export async function POST(request: NextRequest) {
             merchant,
             category: movement.category,
             confidence: movement.confidence,
-            status: row.status,
+            status,
           });
         }
       } catch (error) {
@@ -327,8 +369,7 @@ export async function POST(request: NextRequest) {
         .update({ last_sync: now })
         .eq("id", emailImport.id)
         .eq("user_id", user.id);
-    } else {
-      warnings.push(
+    } else {      warnings.push(
         "No se encontraron correos para procesar en la bandeja de entrada (INBOX). Asegúrate de tener correos de compras de bancos soportados (Banco de Chile, Santander, BCI, BancoEstado, Falabella, etc.)."
       );
       if (since || usedBootstrapFallback) {
@@ -336,6 +377,20 @@ export async function POST(request: NextRequest) {
           "No se actualizó last_sync para permitir reintentar correos históricos en la próxima sincronización."
         );
       }
+    }
+
+    const topIgnoredSenders = [...ignoredSenders.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([from, count]) => ({ from, count }));
+
+    if (fetched.length > 0 && inserted === 0 && ignored > 0) {
+      warnings.push(
+        `Se leyeron ${fetched.length} correos pero ninguno se reconoció como movimiento bancario. Remitentes más frecuentes: ${topIgnoredSenders
+          .slice(0, 3)
+          .map((s) => s.from)
+          .join(", ")}.`
+      );
     }
 
     return NextResponse.json({
@@ -349,10 +404,11 @@ export async function POST(request: NextRequest) {
         ignored,
         failed,
         timed_out: imapResult === null,
-          used_bootstrap_fallback: usedBootstrapFallback,
+        used_bootstrap_fallback: usedBootstrapFallback,
         remainingRateLimit: rate.remainingAttempts,
       },
       preview,
+      ignored_senders: topIgnoredSenders,
       warnings: warnings.slice(0, 20),
     });
   } catch (err) {

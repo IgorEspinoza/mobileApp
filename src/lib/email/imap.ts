@@ -65,6 +65,10 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
       user: options.user,
       pass: options.password,
     },
+    // Evita volcar el protocolo IMAP completo en los logs de produccion.
+    logger: false,
+    greetingTimeout: 10_000,
+    socketTimeout: 60_000,
   });
 
   const mailbox = options.mailbox || "INBOX";
@@ -78,20 +82,28 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
     const searchQuery: Record<string, unknown> = {};
     if (options.since) searchQuery.since = options.since;
     if (unseenOnly) searchQuery.seen = false;
+    // ImapFlow exige al menos un criterio; `all` cubre el caso sin filtros.
+    if (Object.keys(searchQuery).length === 0) searchQuery.all = true;
 
-    const searchResult = await client.search(searchQuery);
+    // `uid: true` es obligatorio: sin el, search devuelve numeros de secuencia
+    // que pueden desplazarse si llega correo nuevo entre el search y el fetch.
+    const searchResult = await client.search(searchQuery, { uid: true });
     const uids = Array.isArray(searchResult) ? searchResult : [];
     if (uids.length === 0) return [];
 
     const targetUids = uids.slice(-limit);
     const emails: FetchedEmail[] = [];
 
-    for await (const message of client.fetch(targetUids, {
-      uid: true,
-      envelope: true,
-      source: true,
-      flags: true,
-    })) {
+    for await (const message of client.fetch(
+      targetUids,
+      {
+        uid: true,
+        envelope: true,
+        source: true,
+        flags: true,
+      },
+      { uid: true }
+    )) {
       if (!message.source) continue;
 
       const parsed = await simpleParser(message.source);
@@ -125,7 +137,12 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
     return emails;
   } finally {
     lock.release();
-    await client.logout();
+    try {
+      await client.logout();
+    } catch {
+      // El cierre limpio es best-effort: no debe tumbar la sincronizacion.
+      client.close();
+    }
   }
 }
 
