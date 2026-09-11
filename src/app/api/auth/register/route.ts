@@ -36,18 +36,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No se pudo crear el usuario" }, { status: 400 });
     }
 
-    // 2. Crear perfil en tabla users
-    const { error: profileError } = await supabase.from("users").insert({
-      id: data.user.id,
-      email,
-      full_name,
-      currency: "CLP",
-      timezone: "America/Santiago",
-      dark_mode: false,
-    });
+    // 2. Asegurar el perfil en la tabla users.
+    //    El trigger `on_auth_user_created` (migracion 004) ya lo crea; este
+    //    upsert es solo una red de seguridad y no debe romper el registro.
+    const { error: profileError } = await supabase.from("users").upsert(
+      {
+        id: data.user.id,
+        email,
+        full_name,
+        currency: "CLP",
+        timezone: "America/Santiago",
+        dark_mode: false,
+      },
+      { onConflict: "id" }
+    );
 
     if (profileError) {
-      console.error("[register] profile insert error:", profileError);
+      // Habitual cuando el registro requiere confirmacion de email: aun no hay
+      // sesion, por lo que RLS rechaza el upsert. El trigger ya cubre el caso.
+      console.warn("[register] profile upsert omitido:", profileError.message);
     }
 
     return NextResponse.json(

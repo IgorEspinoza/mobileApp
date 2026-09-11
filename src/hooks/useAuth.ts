@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/authStore";
 import type { User } from "@/types/database";
+import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 export function useAuth() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export function useAuth() {
     // Obtener sesión actual
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user);
       } else {
         setLoading(false);
       }
@@ -26,8 +27,8 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        await fetchProfile(session.user.id);
+      if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+        await fetchProfile(session.user);
       } else if (event === "SIGNED_OUT") {
         logout();
         router.push("/login");
@@ -37,20 +38,54 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  /**
+   * Construye un perfil mínimo a partir de la sesión de Supabase Auth.
+   * Se usa cuando aún no existe la fila en `public.users` (p. ej. si el trigger
+   * de creación de perfil no se ha ejecutado), para no mostrar "Sin email".
+   */
+  const buildFallbackProfile = (authUser: SupabaseAuthUser): User => {
+    const metadata = (authUser.user_metadata ?? {}) as Record<string, unknown>;
+    const email = authUser.email ?? "";
+
+    return {
+      id: authUser.id,
+      email,
+      full_name:
+        (metadata.full_name as string) ||
+        (metadata.name as string) ||
+        (email ? email.split("@")[0] : "Usuario"),
+      avatar_url: (metadata.avatar_url as string) ?? null,
+      currency: "CLP",
+      timezone: "America/Santiago",
+      dark_mode: true,
+      created_at: authUser.created_at ?? new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  };
+
+  const fetchProfile = async (authUser: SupabaseAuthUser) => {
     setLoading(true);
+
+    // maybeSingle() no lanza error cuando no hay fila (perfil aún no creado).
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("id", userId)
-      .single();
+      .eq("id", authUser.id)
+      .maybeSingle();
 
     if (error) {
       console.error("Error fetching profile:", error);
       setError(error.message);
-    } else {
-      setUser(data as User);
     }
+
+    if (data) {
+      const profile = data as User;
+      // Si el perfil existe pero le falta el email, lo completamos con el de auth.
+      setUser(profile.email ? profile : { ...profile, email: authUser.email ?? "" });
+    } else {
+      setUser(buildFallbackProfile(authUser));
+    }
+
     setLoading(false);
   };
 
