@@ -92,6 +92,9 @@ const RECOMMENDED_MAILBOXES = [
   { value: "__SPAM__", label: "Automático: Spam / Correo no deseado" },
 ];
 
+const EMAIL_SYNC_MAILBOX_STORAGE_KEY = "email-sync-mailbox";
+const EMAIL_SYNC_DAYS_STORAGE_KEY = "email-sync-days";
+
 function formatMailboxLabel(path: string, specialUse?: string | null) {
   if (path === "__INBOX__") return "Automático: Recibidos (INBOX)";
   if (path === "__ALL_MAIL__") return "Automático: Todos / All Mail / Archivo";
@@ -140,6 +143,32 @@ export default function SettingsPage() {
   useEffect(() => {
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedMailbox = window.localStorage.getItem(EMAIL_SYNC_MAILBOX_STORAGE_KEY);
+    const storedDays = window.localStorage.getItem(EMAIL_SYNC_DAYS_STORAGE_KEY);
+
+    if (storedMailbox) {
+      setMailbox(storedMailbox);
+    }
+
+    const parsedDays = Number.parseInt(storedDays || "", 10);
+    if (Number.isFinite(parsedDays) && parsedDays >= 1 && parsedDays <= 365) {
+      setDays(parsedDays);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(EMAIL_SYNC_MAILBOX_STORAGE_KEY, mailbox);
+  }, [mailbox]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(EMAIL_SYNC_DAYS_STORAGE_KEY, String(days));
+  }, [days]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

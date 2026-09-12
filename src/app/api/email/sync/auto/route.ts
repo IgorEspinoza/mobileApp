@@ -312,11 +312,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2) Una sola consulta para detectar duplicados (antes eran 2 por correo,
-    //    lo que agotaba el tiempo maximo de la funcion serverless).
-    let newCandidates = candidates;
+    // 2) Deduplicacion dentro del mismo lote. Algunos buzones pueden devolver
+    // mensajes repetidos o dos copias logicas del mismo correo; si entran dos
+    // `message_id` iguales en un insert masivo, Postgres rechaza TODO el lote.
+    const seenCandidateKeys = new Set<string>();
+    const uniqueCandidates = candidates.filter((candidate) => {
+      const candidateKey = candidate.messageId
+        ? `mid:${candidate.messageId}`
+        : `content:${candidate.subject}|${candidate.merchant}|${candidate.bodySnippet}`;
 
-    if (candidates.length > 0) {
+      if (seenCandidateKeys.has(candidateKey)) {
+        duplicated += 1;
+        return false;
+      }
+
+      seenCandidateKeys.add(candidateKey);
+      return true;
+    });
+
+    // 3) Una sola consulta para detectar duplicados ya guardados.
+    let newCandidates = uniqueCandidates;
+
+    if (uniqueCandidates.length > 0) {
       const { data: existingRows, error: existingError } = await supabaseAdmin
         .from("expense_classifications")
         .select("message_id, subject, merchant")
@@ -338,7 +355,7 @@ export async function POST(request: NextRequest) {
           )
         );
 
-        newCandidates = candidates.filter((c) => {
+        newCandidates = uniqueCandidates.filter((c) => {
           const isDuplicate = c.messageId
             ? existingMessageIds.has(c.messageId)
             : existingContent.has(`${c.subject}|${c.merchant}`);
@@ -349,7 +366,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3) Insercion en lote (una sola llamada en vez de N).
+    // 4) Insercion en lote (una sola llamada en vez de N). Si falla, caemos a
+    // insercion individual para aislar la fila conflictiva.
     if (newCandidates.length > 0) {
       const baseRows = newCandidates.map((c) => ({
         email_import_id: emailImport.id,
@@ -396,8 +414,52 @@ export async function POST(request: NextRequest) {
       }
 
       if (insertError) {
-        failed += newCandidates.length;
-        warnings.push(`No se pudieron guardar los movimientos: ${insertError.message}`);
+        warnings.push(
+          `El insert en lote falló y se reintentará correo por correo: ${insertError.message}`
+        );
+
+        inserted = 0;
+
+        for (let index = 0; index < newCandidates.length; index += 1) {
+          const candidate = newCandidates[index];
+          const baseRow = baseRows[index];
+          const fullRow = fullRows[index];
+
+          let { error: rowInsertError } = await supabaseAdmin
+            .from("expense_classifications")
+            .insert(fullRow);
+
+          if (rowInsertError && /column .* does not exist|schema cache/i.test(rowInsertError.message)) {
+            ({ error: rowInsertError } = await supabaseAdmin
+              .from("expense_classifications")
+              .insert(baseRow));
+          }
+
+          if (rowInsertError) {
+            if (/duplicate key value|unique constraint/i.test(rowInsertError.message)) {
+              duplicated += 1;
+              continue;
+            }
+
+            failed += 1;
+            warnings.push(
+              `No se pudo guardar "${candidate.subject}": ${rowInsertError.message}`
+            );
+            continue;
+          }
+
+          inserted += 1;
+
+          if (preview.length < 10) {
+            preview.push({
+              subject: candidate.subject,
+              merchant: candidate.merchant,
+              category: candidate.movement.category,
+              confidence: candidate.movement.confidence,
+              status: candidate.status,
+            });
+          }
+        }
       } else {
         inserted = insertedRows?.length ?? newCandidates.length;
 
@@ -420,8 +482,9 @@ export async function POST(request: NextRequest) {
         .update({ last_sync: now })
         .eq("id", emailImport.id)
         .eq("user_id", user.id);
-    } else {      warnings.push(
-        "No se encontraron correos para procesar en la bandeja de entrada (INBOX). Asegúrate de tener correos de compras de bancos soportados (Banco de Chile, Santander, BCI, BancoEstado, Falabella, etc.)."
+    } else {
+      warnings.push(
+        `No se encontraron correos para procesar en el buzón "${resolvedMailbox}". Prueba con el buzón "Todos / All Mail" o amplía el rango de días.`
       );
       if (since || usedBootstrapFallback) {
         warnings.push(

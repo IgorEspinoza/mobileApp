@@ -14,6 +14,14 @@ export interface EmailReviewItem {
   status: string;
   expense_id: string | null;
   created_at: string;
+  // Campos de la migracion 005. Pueden venir undefined si no esta aplicada.
+  amount?: number | null;
+  currency?: string | null;
+  transaction_date?: string | null;
+  detected_type?: "expense" | "income" | "installment" | null;
+  num_installments?: number | null;
+  source?: string | null;
+  from_address?: string | null;
   email_imports: {
     email_address: string;
     provider: string;
@@ -44,6 +52,11 @@ export interface SyncAutoResult {
   warnings: string[];
   timed_out?: boolean;
   used_bootstrap_fallback?: boolean;
+  mailbox?: {
+    requested: string;
+    resolved: string;
+    matchedBy: string;
+  };
 }
 
 interface ListResponse {
@@ -63,11 +76,21 @@ export function useEmailReview() {
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // El parser asigna confianza alta a la mayoria de correos bancarios, asi que
+  // quedan como `auto_classified`. Si filtraramos solo por `pending` el usuario
+  // veria la lista vacia aunque la sincronizacion si haya guardado registros.
+  const [status, setStatus] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPending = useCallback(async (params?: { page?: number; limit?: number; q?: string }) => {
+  const fetchPending = useCallback(async (params?: {
+    page?: number;
+    limit?: number;
+    q?: string;
+    status?: string;
+  }) => {
     const nextPage = params?.page ?? page;
     const nextLimit = params?.limit ?? limit;
+    const nextStatus = params?.status ?? status;
     const q = (params?.q ?? searchQuery).trim();
 
     try {
@@ -75,7 +98,7 @@ export function useEmailReview() {
       setError(null);
 
       const search = new URLSearchParams({
-        status: "pending",
+        status: nextStatus,
         page: String(nextPage),
         limit: String(nextLimit),
       });
@@ -98,13 +121,14 @@ export function useEmailReview() {
       setPage(parsed.page ?? nextPage);
       setLimit(parsed.limit ?? nextLimit);
       setSearchQuery(q);
+      setStatus(nextStatus);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [limit, page, searchQuery]);
+  }, [limit, page, searchQuery, status]);
 
   const rejectItem = useCallback(async (id: string) => {
     try {
@@ -162,7 +186,7 @@ export function useEmailReview() {
     }
   }, []);
 
-  const syncAuto = useCallback(async (params?: { limit?: number; unseenOnly?: boolean }) => {
+  const syncAuto = useCallback(async (params?: { limit?: number; unseenOnly?: boolean; mailbox?: string; days?: number }) => {
     try {
       setIsSyncing(true);
       setError(null);
@@ -172,6 +196,8 @@ export function useEmailReview() {
       if (typeof params?.unseenOnly === "boolean") {
         search.set("unseenOnly", params.unseenOnly ? "true" : "false");
       }
+      if (params?.mailbox) search.set("mailbox", params.mailbox);
+      if (params?.days) search.set("days", String(params.days));
 
       const qs = search.toString();
       const res = await fetch(`/api/email/sync/auto${qs ? `?${qs}` : ""}`, {
@@ -190,6 +216,11 @@ export function useEmailReview() {
           timed_out?: boolean;
           used_bootstrap_fallback?: boolean;
         };
+        mailbox?: {
+          requested: string;
+          resolved: string;
+          matchedBy: string;
+        };
         warnings?: string[];
       };
 
@@ -207,6 +238,7 @@ export function useEmailReview() {
         failed: data.stats?.failed ?? 0,
         timed_out: data.stats?.timed_out,
         used_bootstrap_fallback: data.stats?.used_bootstrap_fallback,
+        mailbox: data.mailbox,
         warnings: data.warnings ?? [],
       } satisfies SyncAutoResult;
     } catch (err) {
@@ -238,10 +270,12 @@ export function useEmailReview() {
     isApprovingId,
     isSyncing,
     searchQuery,
+    status,
     totalPages,
     error,
     setError,
     setSearchQuery,
+    setStatus,
     fetchPending,
     syncAuto,
     rejectItem,

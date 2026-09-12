@@ -21,6 +21,9 @@ const CATEGORIES = [
   "Otros",
 ] as const;
 
+const EMAIL_SYNC_MAILBOX_STORAGE_KEY = "email-sync-mailbox";
+const EMAIL_SYNC_DAYS_STORAGE_KEY = "email-sync-days";
+
 type Destination = "expense" | "income" | "installment";
 
 interface DraftOverride {
@@ -44,6 +47,7 @@ export default function EmailReviewPage() {
     isApprovingId,
     isSyncing,
     searchQuery,
+    status,
     error,
     fetchPending,
     syncAuto,
@@ -60,18 +64,29 @@ export default function EmailReviewPage() {
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  // Prellena el borrador con lo que el parser ya detecto (monto, fecha, tipo).
+  // Asi el usuario solo confirma en vez de reescribir todo a mano.
   const getDraft = (id: string): DraftOverride => {
-    return (
-      draftById[id] || {
-        destination: "expense",
-        amount: "",
-        date: today,
-        merchant: "",
-        category: "Otros",
-        source: "other",
-        num_installments: "3",
-      }
-    );
+    const existing = draftById[id];
+    if (existing) return existing;
+
+    const item = items.find((candidate) => candidate.id === id);
+
+    const detectedType = item?.detected_type;
+    const destination: Destination =
+      detectedType === "income" || detectedType === "installment" ? detectedType : "expense";
+
+    const category = item?.manual_category || item?.predicted_category || "Otros";
+
+    return {
+      destination,
+      amount: item?.amount != null ? String(item.amount) : "",
+      date: item?.transaction_date || today,
+      merchant: item?.merchant || "",
+      category: (CATEGORIES as readonly string[]).includes(category) ? category : "Otros",
+      source: "other",
+      num_installments: item?.num_installments != null ? String(item.num_installments) : "3",
+    };
   };
 
   const updateDraft = (id: string, patch: Partial<DraftOverride>) => {
@@ -117,7 +132,20 @@ export default function EmailReviewPage() {
   };
 
   const handleSyncAuto = async () => {
-    const result = await syncAuto({ limit: 10 });
+    const storedMailbox = typeof window === "undefined"
+      ? null
+      : window.localStorage.getItem(EMAIL_SYNC_MAILBOX_STORAGE_KEY);
+    const storedDaysRaw = typeof window === "undefined"
+      ? null
+      : window.localStorage.getItem(EMAIL_SYNC_DAYS_STORAGE_KEY);
+    const storedDays = Number.parseInt(storedDaysRaw || "", 10);
+
+    const result = await syncAuto({
+      limit: 20,
+      mailbox: storedMailbox || "__INBOX__",
+      days: Number.isFinite(storedDays) ? storedDays : 30,
+    });
+
     if (result.inserted >= 0) {
       if (result.warnings.length > 0) {
         toast.success(
@@ -125,6 +153,10 @@ export default function EmailReviewPage() {
         );
       } else {
         toast.success(result.inserted > 0 ? `Sincronización OK: ${result.inserted} nuevo(s)` : "Sincronización OK: sin correos nuevos");
+      }
+
+      if (result.mailbox) {
+        toast.info(`Buzón usado: ${result.mailbox.resolved}`);
       }
     } else {
       const errorMsg = result.warnings?.[0] || error || "No se pudo sincronizar el correo automáticamente";
@@ -153,12 +185,26 @@ export default function EmailReviewPage() {
         <p className="mt-2 text-slate-300">
           Correos ambiguos pendientes de clasificación manual.
         </p>
+        <p className="mt-1 text-xs text-slate-500">
+          La sincronización desde esta pantalla usa el buzón y rango de días guardados en <Link href="/settings" className="text-sky-300 underline">Ajustes</Link>.
+        </p>
       </div>
 
       <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-300">Pendientes: <span className="font-semibold text-white">{total}</span></p>
-          <div className="flex items-center gap-2">
+          <p className="text-sm text-slate-300">Resultados: <span className="font-semibold text-white">{total}</span></p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={status}
+              onChange={(e) => fetchPending({ page: 1, status: e.target.value })}
+              className="min-h-[40px] rounded-lg border border-slate-600 bg-slate-800/70 px-3 py-2 text-sm text-slate-100"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="pending">Pendientes</option>
+              <option value="auto_classified">Auto-clasificados</option>
+              <option value="approved">Aprobados</option>
+              <option value="rejected">Rechazados</option>
+            </select>
             <input
               type="text"
               value={searchQuery}
@@ -199,10 +245,13 @@ export default function EmailReviewPage() {
 
         {isLoading ? (
           <div className="mt-6">
-            <Loading text="Cargando correos pendientes..." />
+            <Loading text="Cargando correos..." />
           </div>
         ) : items.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-400">No hay correos pendientes por revisar.</p>
+          <p className="mt-6 text-sm text-slate-400">
+            No hay correos con el estado seleccionado. Si acabas de sincronizar, prueba con
+            &quot;Todos los estados&quot;.
+          </p>
         ) : (
           <div className="mt-5 space-y-3">
             {items.map((item) => (
@@ -216,7 +265,27 @@ export default function EmailReviewPage() {
                   return (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{item.subject || "Sin asunto"}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-white">{item.subject || "Sin asunto"}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                          item.status === "pending"
+                            ? "bg-amber-500/15 text-amber-300"
+                            : item.status === "auto_classified"
+                              ? "bg-sky-500/15 text-sky-300"
+                              : item.status === "approved"
+                                ? "bg-emerald-500/15 text-emerald-300"
+                                : "bg-slate-600/30 text-slate-300"
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                      {item.amount != null && (
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+                          ${Number(item.amount).toLocaleString("es-CL")}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-sm text-slate-300">{item.merchant || "Sin comercio"}</p>
                     <p className="mt-1 line-clamp-2 text-xs text-slate-400">{item.body_snippet || "Sin detalle"}</p>
 
