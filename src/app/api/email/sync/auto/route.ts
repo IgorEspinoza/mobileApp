@@ -333,37 +333,104 @@ export async function POST(request: NextRequest) {
     // 3) Una sola consulta para detectar duplicados ya guardados.
     let newCandidates = uniqueCandidates;
 
+    // Filas guardadas antes de aplicar la migracion 005: existen pero sin monto
+    // ni fecha. En vez de saltarlas como duplicadas, las completamos.
+    const candidatesToBackfill: Array<{ id: string; candidate: Candidate }> = [];
+
     if (uniqueCandidates.length > 0) {
       const { data: existingRows, error: existingError } = await supabaseAdmin
         .from("expense_classifications")
-        .select("message_id, subject, merchant")
+        .select("id, message_id, subject, merchant, amount")
         .eq("email_import_id", emailImport.id)
         .limit(1000);
 
       if (existingError) {
         warnings.push(`No se pudo validar duplicados: ${existingError.message}`);
       } else {
-        const existingMessageIds = new Set(
-          (existingRows ?? [])
-            .map((r) => (r as { message_id: string | null }).message_id)
-            .filter((v): v is string => Boolean(v))
-        );
-        const existingContent = new Set(
-          (existingRows ?? []).map(
-            (r) =>
-              `${(r as { subject: string | null }).subject}|${(r as { merchant: string | null }).merchant}`
-          )
-        );
+        type ExistingRow = {
+          id: string;
+          message_id: string | null;
+          subject: string | null;
+          merchant: string | null;
+          amount: number | null;
+        };
+
+        const rows = (existingRows ?? []) as unknown as ExistingRow[];
+
+        const byMessageId = new Map<string, ExistingRow>();
+        const byContent = new Map<string, ExistingRow>();
+
+        for (const row of rows) {
+          if (row.message_id) byMessageId.set(row.message_id, row);
+          byContent.set(`${row.subject}|${row.merchant}`, row);
+        }
 
         newCandidates = uniqueCandidates.filter((c) => {
-          const isDuplicate = c.messageId
-            ? existingMessageIds.has(c.messageId)
-            : existingContent.has(`${c.subject}|${c.merchant}`);
+          const existing = c.messageId
+            ? byMessageId.get(c.messageId) ?? byContent.get(`${c.subject}|${c.merchant}`)
+            : byContent.get(`${c.subject}|${c.merchant}`);
 
-          if (isDuplicate) duplicated += 1;
-          return !isDuplicate;
+          if (!existing) return true;
+
+          // Ya existe. Si le falta el monto, lo completamos en vez de ignorarlo.
+          if (existing.amount === null || existing.amount === undefined) {
+            candidatesToBackfill.push({ id: existing.id, candidate: c });
+          } else {
+            duplicated += 1;
+          }
+
+          return false;
         });
       }
+    }
+
+    // 3.b) Completar las filas antiguas que quedaron sin monto.
+    let backfilled = 0;
+
+    for (const { id, candidate } of candidatesToBackfill) {
+      const { error: backfillError } = await supabaseAdmin
+        .from("expense_classifications")
+        .update({
+          user_id: user.id,
+          message_id: candidate.messageId,
+          amount: candidate.movement.amount,
+          currency: candidate.movement.currency,
+          transaction_date: candidate.movement.date,
+          detected_type: candidate.movement.type,
+          num_installments: candidate.movement.numInstallments,
+          source: candidate.movement.source,
+          from_address: candidate.email.from,
+          classified_by: "rules",
+          predicted_category: candidate.movement.category,
+          confidence: candidate.movement.confidence,
+        })
+        .eq("id", id);
+
+      if (backfillError) {
+        failed += 1;
+        warnings.push(
+          `No se pudo completar el movimiento "${candidate.subject}": ${backfillError.message}`
+        );
+        continue;
+      }
+
+      backfilled += 1;
+
+      if (preview.length < 10) {
+        preview.push({
+          subject: candidate.subject,
+          merchant: candidate.merchant,
+          category: candidate.movement.category,
+          confidence: candidate.movement.confidence,
+          status: candidate.status,
+        });
+      }
+    }
+
+    if (backfilled > 0) {
+      warnings.push(
+        `Se completaron ${backfilled} movimiento(s) que estaban guardados sin monto (antes de aplicar la migración 005).`
+      );
     }
 
     // 4) Insercion en lote (una sola llamada en vez de N). Si falla, caemos a
@@ -498,7 +565,7 @@ export async function POST(request: NextRequest) {
       .slice(0, 10)
       .map(([from, count]) => ({ from, count }));
 
-    if (fetched.length > 0 && inserted === 0 && ignored > 0) {
+    if (fetched.length > 0 && inserted === 0 && backfilled === 0 && ignored > 0) {
       warnings.push(
         `Se leyeron ${fetched.length} correos pero ninguno se reconoció como movimiento bancario. Remitentes más frecuentes: ${topIgnoredSenders
           .slice(0, 3)
@@ -519,6 +586,7 @@ export async function POST(request: NextRequest) {
         fetched: fetched.length,
         parsed,
         inserted,
+        backfilled,
         duplicated,
         ignored,
         failed,

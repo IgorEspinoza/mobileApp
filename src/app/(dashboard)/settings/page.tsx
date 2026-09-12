@@ -68,6 +68,7 @@ interface SyncResult {
     fetched: number;
     parsed: number;
     inserted: number;
+    backfilled?: number;
     duplicated: number;
     ignored: number;
     failed: number;
@@ -225,9 +226,14 @@ export default function SettingsPage() {
       setSyncResult(data);
 
       const inserted = data.stats?.inserted ?? 0;
+      const backfilled = data.stats?.backfilled ?? 0;
       const fetched = data.stats?.fetched ?? 0;
-      if (inserted > 0) {
-        toast.success(`Sincronización exitosa: ${inserted} nuevo(s) movimiento(s) de ${fetched} correos.`);
+      const saved = inserted + backfilled;
+
+      if (saved > 0) {
+        toast.success(
+          `Sincronización exitosa: ${saved} movimiento(s) listos de ${fetched} correos.`
+        );
       } else if (data.warnings && data.warnings.length > 0) {
         toast.error(data.warnings[0]);
       } else {
@@ -389,11 +395,12 @@ export default function SettingsPage() {
                   <span className="text-slate-500"> · coincidencia: {syncResult.mailbox.matchedBy}</span>
                 </p>
 
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
                   {[
                     { label: "Leídos", value: syncResult.stats.fetched },
                     { label: "Reconocidos", value: syncResult.stats.parsed },
                     { label: "Guardados", value: syncResult.stats.inserted },
+                    { label: "Completados", value: syncResult.stats.backfilled ?? 0 },
                     { label: "Duplicados", value: syncResult.stats.duplicated },
                     { label: "Ignorados", value: syncResult.stats.ignored },
                     { label: "Fallidos", value: syncResult.stats.failed },
