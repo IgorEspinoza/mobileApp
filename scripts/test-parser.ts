@@ -126,6 +126,33 @@ const CASES: TestCase[] = [
     },
     expect: { type: "income", amount: 150000 },
   },
+  {
+    name: "Aviso informativo de banco con monto (debe ignorarse)",
+    email: {
+      from: "comunicaciones@bancochile.cl",
+      subject: "Conoce los nuevos beneficios de tu plan",
+      body: "Desde ahora tu plan incluye cobertura por $500.000 al año. Te invitamos a revisar los detalles.",
+    },
+    expect: null,
+  },
+  {
+    name: "Reajuste de comision sin señal de transaccion (debe ignorarse)",
+    email: {
+      from: "info@santander.cl",
+      subject: "Informacion sobre tu plan de cuenta",
+      body: "La comision mensual de tu plan sera de $4.500 a partir del proximo periodo.",
+    },
+    expect: null,
+  },
+  {
+    name: "Compra sin keyword pero con tarjeta terminada (debe detectarse)",
+    email: {
+      from: "enviodigital@bancochile.cl",
+      subject: "Notificacion de movimiento",
+      body: "Te informamos un movimiento por $18.500 con tu tarjeta terminada en 4821.",
+    },
+    expect: { type: "expense", amount: 18500 },
+  },
 ];
 
 // --- Pruebas unitarias de parseAmount ---

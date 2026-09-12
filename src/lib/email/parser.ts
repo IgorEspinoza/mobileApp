@@ -216,6 +216,10 @@ function cleanMerchant(raw: string): string {
   // Quita codigos de comercio tipo "SANTA ISABEL 1234"
   merchant = merchant.replace(/\s+\d{3,}$/, "").trim();
 
+  // Un "comercio" puramente numerico casi siempre es el numero de tarjeta o
+  // un codigo de referencia ("...terminada en 4821"), no un nombre real.
+  if (/^[\d\s.,\-*#]+$/.test(merchant)) return "";
+
   const normalized = normalizeText(merchant);
   if (!merchant || MERCHANT_NOISE.includes(normalized)) return "";
   if (merchant.length < 3) return "";
@@ -314,7 +318,28 @@ const IGNORE_HINTS = [
   "encuesta", "clave", "contrasena", "bloqueo", "phishing",
   "saldo disponible", "cupo disponible", "recordatorio de pago",
   "proximo vencimiento", "kino", "loto", "sorteo", "apuesta", "jackpot",
+  // Avisos administrativos que suelen traer montos pero no son movimientos.
+  "terminos y condiciones", "actualiza tus datos", "cambio de clave",
+  "boletin informativo", "mantencion programada", "aviso legal",
+  "politica de privacidad", "invitacion a", "te invitamos",
 ];
+
+/**
+ * Señales de que el correo describe una transaccion real y no un aviso
+ * informativo: referencia a la tarjeta/cuenta usada o confirmacion explicita.
+ */
+const TRANSACTION_SIGNALS: RegExp[] = [
+  /tarjeta\s+(?:de\s+)?(?:credito|debito)?\s*(?:terminada|terminado|que\s+termina|final)\s*(?:en)?\s*[\dx*]{3,}/i,
+  /\*{2,}\s*\d{3,4}/, // "****1234"
+  /(?:n[uú]mero|nro\.?|n°)\s*(?:de\s+)?(?:tarjeta|cuenta)\s*[\dx*]{3,}/i,
+  /\b(?:autorizada|aprobada|realizada|exitosa|confirmada|efectuada)\b/i,
+  /\bcomercio\b/i,
+  /\ben\s+\d{1,2}\s+cuotas?\b/i,
+];
+
+function hasTransactionSignal(text: string): boolean {
+  return TRANSACTION_SIGNALS.some((pattern) => pattern.test(text));
+}
 
 type MovementType = "expense" | "income" | "installment" | null;
 
@@ -379,11 +404,17 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   const money = extractAmount(text);
   if (!money) return null;
 
+  const detectedMerchant = extractMerchant(email.subject, body);
+
   let movementType = type;
   if (!movementType) {
-    // Fallback: si es un correo de banco/billetera con monto, asumimos gasto.
-    // Esto evita perder movimientos reales por no matchear keywords exactas.
-    if (source !== "desconocido") {
+    // Fallback controlado: un correo de banco con monto solo se considera
+    // gasto si ademas hay evidencia de transaccion (comercio identificado o
+    // referencia a la tarjeta/cuenta). Sin eso entrarian avisos informativos
+    // que traen cifras pero no son movimientos reales.
+    const looksTransactional = Boolean(detectedMerchant) || hasTransactionSignal(text);
+
+    if (source !== "desconocido" && looksTransactional) {
       movementType = "expense";
     } else {
       return null;
@@ -392,7 +423,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
 
   const numInstallments = movementType === "expense" ? extractInstallments(text) : null;
 
-  let merchant = extractMerchant(email.subject, body);
+  let merchant = detectedMerchant;
   if (!merchant) {
     // Sin comercio identificable usamos el emisor como referencia.
     merchant = source !== "desconocido" ? SOURCE_LABELS[source] ?? source : "Sin detalle";
