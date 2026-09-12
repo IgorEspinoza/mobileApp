@@ -74,6 +74,7 @@ export function useEmailReview() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRejectingId, setIsRejectingId] = useState<string | null>(null);
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   // El parser asigna confianza alta a la mayoria de correos bancarios, asi que
@@ -258,6 +259,50 @@ export function useEmailReview() {
     }
   }, [fetchPending]);
 
+  const approveAll = useCallback(async (ids?: string[]) => {
+    try {
+      setIsApprovingAll(true);
+      setError(null);
+
+      const res = await fetch("/api/email/review/approve-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids && ids.length > 0 ? { ids } : {}),
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        stats?: {
+          candidates?: number;
+          approved?: number;
+          skipped?: number;
+          failed?: number;
+        };
+        warnings?: string[];
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error al aprobar en bloque");
+      }
+
+      await fetchPending({ page: 1 });
+
+      return {
+        approved: data.stats?.approved ?? 0,
+        skipped: data.stats?.skipped ?? 0,
+        failed: data.stats?.failed ?? 0,
+        candidates: data.stats?.candidates ?? 0,
+        warnings: data.warnings ?? [],
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error desconocido";
+      setError(message);
+      return { approved: -1, skipped: 0, failed: 1, candidates: 0, warnings: [message] };
+    } finally {
+      setIsApprovingAll(false);
+    }
+  }, [fetchPending]);
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return {
@@ -268,6 +313,7 @@ export function useEmailReview() {
     isLoading,
     isRejectingId,
     isApprovingId,
+    isApprovingAll,
     isSyncing,
     searchQuery,
     status,
@@ -280,6 +326,7 @@ export function useEmailReview() {
     syncAuto,
     rejectItem,
     approveItem,
+    approveAll,
   };
 }
 

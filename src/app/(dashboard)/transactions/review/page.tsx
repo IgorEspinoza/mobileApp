@@ -45,6 +45,7 @@ export default function EmailReviewPage() {
     isLoading,
     isRejectingId,
     isApprovingId,
+    isApprovingAll,
     isSyncing,
     searchQuery,
     status,
@@ -53,6 +54,7 @@ export default function EmailReviewPage() {
     syncAuto,
     rejectItem,
     approveItem,
+    approveAll,
     setSearchQuery,
   } = useEmailReview();
   const toast = useToast();
@@ -164,6 +166,38 @@ export default function EmailReviewPage() {
     }
   };
 
+  const handleApproveAll = async () => {
+    const confirmed = window.confirm(
+      "Se crearán gastos, ingresos y cuotas reales a partir de los correos detectados con monto. ¿Continuar?"
+    );
+    if (!confirmed) return;
+
+    const result = await approveAll();
+
+    if (result.approved < 0) {
+      toast.error(result.warnings[0] || "No se pudo aprobar en bloque");
+      return;
+    }
+
+    if (result.approved === 0) {
+      toast.error(
+        result.skipped > 0
+          ? `Ninguno tenía monto detectado (${result.skipped} omitidos). Apruébalos manualmente.`
+          : "No había correos por aprobar."
+      );
+      return;
+    }
+
+    toast.success(
+      `${result.approved} movimiento(s) creado(s) y ya visibles en el Dashboard.` +
+        (result.skipped > 0 ? ` ${result.skipped} sin monto quedaron pendientes.` : "")
+    );
+
+    if (result.warnings.length > 0) {
+      toast.error(result.warnings[0]);
+    }
+  };
+
   const goPage = async (nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
     await fetchPending({ page: nextPage });
@@ -184,6 +218,9 @@ export default function EmailReviewPage() {
         <h1 className="text-3xl font-bold tracking-tight text-white">Revisión de correos</h1>
         <p className="mt-2 text-slate-300">
           Correos ambiguos pendientes de clasificación manual.
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Los correos sincronizados <strong className="text-slate-400">no aparecen en el Dashboard</strong> hasta que los apruebes aquí. Al aprobar se crean los gastos, ingresos y cuotas reales.
         </p>
         <p className="mt-1 text-xs text-slate-500">
           La sincronización desde esta pantalla usa el buzón y rango de días guardados en <Link href="/settings" className="text-sky-300 underline">Ajustes</Link>.
@@ -226,6 +263,14 @@ export default function EmailReviewPage() {
               className="inline-flex min-h-[40px] items-center rounded-lg border border-emerald-500/50 px-3 py-2.5 text-sm text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSyncing ? "Sincronizando..." : "Sincronizar correo"}
+            </button>
+            <button
+              type="button"
+              onClick={handleApproveAll}
+              disabled={isApprovingAll}
+              className="inline-flex min-h-[40px] items-center rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isApprovingAll ? "Aprobando..." : "Aprobar todos"}
             </button>
             <button
               type="button"
