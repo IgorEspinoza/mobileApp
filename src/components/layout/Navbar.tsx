@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/transactions", label: "Transacciones" },
   { href: "/transactions/review", label: "Revisar correos" },
+  { href: "/hogar", label: "Hogar" },
   { href: "/settings", label: "Ajustes" },
 ];
 
