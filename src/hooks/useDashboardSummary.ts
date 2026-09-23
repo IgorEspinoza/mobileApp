@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 interface DashboardSummary {
   month: string;
@@ -18,8 +19,9 @@ export function useDashboardSummary() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pathname = usePathname();
 
-  const fetchSummary = async () => {
+  const fetchSummary = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -36,13 +38,22 @@ export function useDashboardSummary() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
+  // Refetch on mount and when navigating back to this page
   useEffect(() => {
     fetchSummary();
-  }, []);
+  }, [fetchSummary, pathname]);
+
+  // Refetch when the window regains focus (e.g. user was on another tab/page)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchSummary();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [fetchSummary]);
 
   return { summary, isLoading, error, refetch: fetchSummary };
 }
-
-

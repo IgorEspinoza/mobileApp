@@ -130,6 +130,9 @@ const AMOUNT_PATTERNS: RegExp[] = [
   // Palabras clave + monto. "de" se quito como keyword porque es demasiado
   // comun en espanol y genera falsos positivos ("de 5 estrellas", "de 14 dias").
   /(?:por|monto|total|valor|importe|pago)\s*(?:de)?\s*:?\s*\$?\s*([\d.,]+)/i,
+  // Monto cerca de keywords transaccionales (cargo en cuenta, compra, etc.)
+  // Captura "cargo en tu cuenta corriente por $163.037" o "cargo ... 163.037"
+  /(?:cargo|carga|compra|pago|abono|transferencia|debito|giro)(?:[^\d$]{0,80})\$?\s*([\d]{1,3}(?:[.,]\d{3})+)/i,
   // Fallback: numero con formato CLP (puntos como separador de miles, >= 1.000)
   // captura "50.000", "163.037" aunque no tenga $ ni keyword delante.
   /(?:^|\s)(\d{1,3}(?:\.\d{3})+)(?:\s|$)/m,
@@ -310,7 +313,8 @@ function extractDate(text: string, fallback: Date): string {
 
 const EXPENSE_HINTS = [
   "compra", "cargo", "carga", "pago", "pagaste", "giro", "transaccion",
-  "consumo", "debito", "suscripcion", "cobro",
+  "consumo", "debito", "suscripcion", "cobro", "cargo en cuenta",
+  "cargo en tu cuenta", "descuento", "retiro",
 ];
 
 const INCOME_HINTS = [
@@ -423,12 +427,13 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   let movementType = type;
   if (!movementType) {
     // Fallback controlado: un correo de banco con monto solo se considera
-    // gasto si ademas hay evidencia de transaccion (comercio identificado o
-    // referencia a la tarjeta/cuenta). Sin eso entrarian avisos informativos
-    // que traen cifras pero no son movimientos reales.
+    // gasto si ademas hay evidencia de transaccion (comercio identificado,
+    // referencia a la tarjeta/cuenta, o keywords transaccionales en el texto).
     const looksTransactional = Boolean(detectedMerchant) || hasTransactionSignal(text);
+    // Banco Chile y otros bancos usan "cargo en cuenta" sin mas detalle
+    const hasTransactionKeyword = /(?:cargo|carga|compra|pago|debito|giro|transferencia|abono)\s+(?:en|a|de|por)/i.test(text);
 
-    if (source !== "desconocido" && looksTransactional) {
+    if (source !== "desconocido" && (looksTransactional || hasTransactionKeyword)) {
       movementType = "expense";
     } else {
       return null;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export interface Transaction {
   id: string;
@@ -16,8 +17,9 @@ export function useRecentTransactions(limit: number = 5, trigger: number = 0) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pathname = usePathname();
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -36,13 +38,11 @@ export function useRecentTransactions(limit: number = 5, trigger: number = 0) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [limit]);
 
   useEffect(() => {
     fetchTransactions();
-  }, [limit, trigger]);
+  }, [fetchTransactions, trigger, pathname]);
 
   return { transactions, isLoading, error, refetch: fetchTransactions };
 }
-
-

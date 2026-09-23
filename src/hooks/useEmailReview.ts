@@ -80,7 +80,7 @@ export function useEmailReview() {
   // El parser asigna confianza alta a la mayoria de correos bancarios, asi que
   // quedan como `auto_classified`. Si filtraramos solo por `pending` el usuario
   // veria la lista vacia aunque la sincronizacion si haya guardado registros.
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("pending");
   const [error, setError] = useState<string | null>(null);
 
   const fetchPending = useCallback(async (params?: {
