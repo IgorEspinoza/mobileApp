@@ -129,7 +129,10 @@ const AMOUNT_PATTERNS: RegExp[] = [
   /(?:CLP|USD|UF)\s*\$?\s*([\d.,]+)/i,
   // Palabras clave + monto. "de" se quito como keyword porque es demasiado
   // comun en espanol y genera falsos positivos ("de 5 estrellas", "de 14 dias").
-  /(?:por|monto|total|valor|importe|pago)\s*(?:de)?\s*\$?\s*([\d.,]+)/i,
+  /(?:por|monto|total|valor|importe|pago)\s*(?:de)?\s*:?\s*\$?\s*([\d.,]+)/i,
+  // Fallback: numero con formato CLP (puntos como separador de miles, >= 1.000)
+  // captura "50.000", "163.037" aunque no tenga $ ni keyword delante.
+  /(?:^|\s)(\d{1,3}(?:\.\d{3})+)(?:\s|$)/m,
 ];
 
 /**
@@ -380,7 +383,11 @@ export function htmlToText(html: string): string {
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&dollar;/gi, "$")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();

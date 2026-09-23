@@ -6,7 +6,7 @@ import {
   resolveImapMailbox,
   type FetchedEmail,
 } from "@/lib/email/imap";
-import { parsePurchaseEmail } from "@/lib/email/parser";
+import { parsePurchaseEmail, detectSource, htmlToText } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
   EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
@@ -288,6 +288,20 @@ export async function POST(request: NextRequest) {
         if (!movement) {
           ignored += 1;
           ignoredSenders.set(email.from, (ignoredSenders.get(email.from) || 0) + 1);
+
+          // Diagnostico: si el correo es de un banco conocido, registrar
+          // un snippet del contenido para depurar por que no se detecto monto.
+          const emailSource = detectSource(email.from);
+          if (emailSource) {
+            const bodyText = /<[a-z][\s\S]*>/i.test(email.body)
+              ? htmlToText(email.body)
+              : email.body;
+            const snippet = bodyText.slice(0, 300).replace(/\n/g, " | ");
+            warnings.push(
+              `[DEBUG] Correo de ${emailSource} ignorado (sin monto detectado). Asunto: "${(email.subject || "").slice(0, 80)}". Texto: ${snippet}`
+            );
+          }
+
           continue;
         }
 
