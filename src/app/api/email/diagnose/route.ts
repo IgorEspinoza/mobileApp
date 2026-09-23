@@ -6,6 +6,7 @@ import {
   detectSource,
   htmlToText,
   parsePurchaseEmail,
+  parsePurchaseEmailDebug,
 } from "@/lib/email/parser";
 
 export const runtime = "nodejs";
@@ -141,7 +142,8 @@ export async function GET(request: NextRequest) {
       } else if (!source) {
         reason = "Descartado: remitente no reconocido como banco/billetera";
       } else {
-        reason = "Descartado: no se encontró un monto en el correo";
+        const debugInfo = parsePurchaseEmailDebug(email);
+        reason = debugInfo || "Descartado: no se encontró un monto en el correo";
       }
 
       return {
@@ -163,7 +165,7 @@ export async function GET(request: NextRequest) {
               num_installments: movement.numInstallments,
             }
           : null,
-        body_preview: bodyText.slice(0, 240),
+        body_preview: bodyText.slice(0, 500),
       };
     });
 

@@ -411,11 +411,23 @@ function detectType(text: string): MovementType {
 /** Convierte HTML en texto plano legible para el parser. */
 export function htmlToText(html: string): string {
   return html
+    // Eliminar contenido no visible.
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    // Comentarios HTML (bancos meten metadata aqui).
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    // Saltos de linea semanticos.
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|td|h\d)>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h\d)>/gi, "\n")
+    // Separar celdas de tabla con espacio (no newline) para mantener
+    // "Monto $50.000" en la misma linea cuando estan en <td> adyacentes.
+    .replace(/<\/td>/gi, " ")
+    // Atributos alt de imagenes (a veces el monto esta como alt text).
+    .replace(/<img[^>]*alt=["']([^"']+)["'][^>]*>/gi, " $1 ")
+    // Eliminar tags restantes.
     .replace(/<[^>]+>/g, " ")
+    // Entidades HTML comunes.
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
@@ -425,7 +437,12 @@ export function htmlToText(html: string): string {
     .replace(/&dollar;/gi, "$")
     .replace(/&quot;/gi, '"')
     .replace(/&apos;/gi, "'")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&[a-zA-Z]+;/g, " ") // Cualquier otra entidad → espacio
+    // Normalizar whitespace.
     .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{2,}/g, "\n")
     .trim();
 }
@@ -498,6 +515,54 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     source,
     snippet: body.slice(0, 500),
   };
+}
+
+
+/**
+ * Versión de diagnóstico: en vez de devolver null, explica POR QUÉ el correo
+ * no se reconoció como movimiento. Solo para el endpoint /api/email/diagnose.
+ */
+export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
+  const body = /<[a-z][\s\S]*>/i.test(email.body)
+    ? htmlToText(email.body)
+    : email.body;
+
+  const text = `${email.subject}\n${body}`;
+  const source = detectSource(email.from) ?? "desconocido";
+
+  if (isIgnorable(text)) {
+    return `Descartado: correo informativo (isIgnorable). Texto inicio: "${text.slice(0, 120)}"`;
+  }
+
+  const type = detectType(text);
+  const money = extractAmount(text);
+
+  if (!money) {
+    // Mostrar qué texto se buscó para encontrar montos
+    const searchable = stripNonTransactionAmounts(text);
+    // Buscar cualquier cosa que parezca un número
+    const numberMatches = searchable.match(/\$?\s*[\d.,]{3,}/g);
+    return `Descartado: no se encontró monto. Números hallados: [${
+      numberMatches ? numberMatches.slice(0, 5).map(m => m.trim()).join(", ") : "ninguno"
+    }]. Texto (240 chars): "${searchable.slice(0, 240).replace(/\n/g, " | ")}"`;
+  }
+
+  if (money.currency === "CLP" && money.amount < 100) {
+    return `Descartado: monto $${money.amount} muy bajo (< $100 CLP)`;
+  }
+
+  if (!type) {
+    const detectedMerchant = extractMerchant(email.subject, body);
+    const looksTransactional = Boolean(detectedMerchant) || hasTransactionSignal(text);
+    const hasTransactionKeyword = /(?:cargo|carga|compra|pago|debito|giro|transferencia|abono)\s+(?:en|a|de|por)/i.test(text);
+
+    if (source !== "desconocido" && (looksTransactional || hasTransactionKeyword)) {
+      return null; // Se habría parseado correctamente
+    }
+    return `Descartado: tipo no detectado y sin señales transaccionales. Source: ${source}`;
+  }
+
+  return null; // Se habría parseado correctamente
 }
 
 /** Extrae el sufijo de un alias: "igor+ana@gmail.com" -> "ana". */
