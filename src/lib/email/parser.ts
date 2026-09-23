@@ -124,9 +124,12 @@ export function parseAmount(raw: string): number | null {
 }
 
 const AMOUNT_PATTERNS: RegExp[] = [
-  /(?:por|de|monto|total|valor|importe)\s*(?:de)?\s*\$?\s*([\d.,]+)/i,
+  // Signo $ explicito: la senal mas fiable de un monto en el correo.
   /\$\s*([\d.,]+)/,
   /(?:CLP|USD|UF)\s*\$?\s*([\d.,]+)/i,
+  // Palabras clave + monto. "de" se quito como keyword porque es demasiado
+  // comun en espanol y genera falsos positivos ("de 5 estrellas", "de 14 dias").
+  /(?:por|monto|total|valor|importe|pago)\s*(?:de)?\s*\$?\s*([\d.,]+)/i,
 ];
 
 /**
@@ -303,7 +306,7 @@ function extractDate(text: string, fallback: Date): string {
  * ------------------------------------------------------------------ */
 
 const EXPENSE_HINTS = [
-  "compra", "cargo", "pago", "pagaste", "giro", "transaccion",
+  "compra", "cargo", "carga", "pago", "pagaste", "giro", "transaccion",
   "consumo", "debito", "suscripcion", "cobro",
 ];
 
@@ -403,6 +406,10 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
 
   const money = extractAmount(text);
   if (!money) return null;
+
+  // Sanidad: en CLP, montos bajo $100 son casi siempre falsos positivos
+  // (numeros sueltos capturados por las regex, no transacciones reales).
+  if (money.currency === "CLP" && money.amount < 100) return null;
 
   const detectedMerchant = extractMerchant(email.subject, body);
 
