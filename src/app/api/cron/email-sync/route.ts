@@ -226,8 +226,7 @@ async function syncUserEmails(
   for (const c of newCandidates) {
     const shouldAutoApprove =
       c.movement.confidence >= AUTO_APPROVE_CONFIDENCE &&
-      (c.movement.type === "expense" || c.movement.type === "income") &&
-      c.movement.type !== "installment";
+      (c.movement.type === "expense" || c.movement.type === "income");
 
     // Siempre crear la clasificación para trazabilidad
     const classificationRow = {
