@@ -585,17 +585,19 @@ export default function SettingsPage() {
                                   {d.movement.category}
                                 </span>
                               ) : (
-                                <span className="text-slate-500">{d.reason}</span>
-                                {d.body_preview && !d.movement && d.detected_source && (
-                                  <details className="mt-1">
-                                    <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-400">
-                                      Ver texto extraído
-                                    </summary>
-                                    <pre className="mt-1 text-xs text-slate-500 whitespace-pre-wrap max-h-32 overflow-y-auto bg-slate-800/50 p-2 rounded">
-                                      {d.body_preview}
-                                    </pre>
-                                  </details>
-                                )}
+                                <>
+                                  <span className="text-slate-500">{d.reason}</span>
+                                  {d.body_preview && !d.movement && d.detected_source && (
+                                    <details className="mt-1">
+                                      <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-400">
+                                        Ver texto extraído
+                                      </summary>
+                                      <pre className="mt-1 text-xs text-slate-500 whitespace-pre-wrap max-h-32 overflow-y-auto bg-slate-800/50 p-2 rounded">
+                                        {d.body_preview}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </>
                               )}
                             </td>
                           </tr>
