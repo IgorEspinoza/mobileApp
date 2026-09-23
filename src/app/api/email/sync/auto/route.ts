@@ -15,6 +15,7 @@ import {
   EMAIL_SYNC_MAX_LIMIT,
 } from "@/lib/utils/constants";
 import { checkRateLimit } from "@/lib/utils/rateLimit";
+import { autoApproveClassifications } from "@/lib/email/autoApprove";
 
 export const runtime = "nodejs";
 // Sin esto Vercel corta la funcion a los 10s por defecto: la lectura IMAP mas
@@ -561,6 +562,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auto-aprobar transacciones de alta confianza
+    let autoApproved = 0;
+    if (inserted > 0 || backfilled > 0) {
+      const autoResult = await autoApproveClassifications(user.id, emailImport.id);
+      autoApproved = autoResult.approved;
+      if (autoResult.errors.length > 0) {
+        warnings.push(...autoResult.errors.map(e => `Auto-aprobación: ${e}`));
+      }
+    }
+
     if (fetched.length > 0) {
       const now = new Date().toISOString();
       await supabaseAdmin
@@ -611,6 +622,7 @@ export async function POST(request: NextRequest) {
         failed,
         timed_out: imapResult === null,
         used_bootstrap_fallback: usedBootstrapFallback,
+        autoApproved,
         duration_ms: Date.now() - startedAt,
         remainingRateLimit: rate.remainingAttempts,
       },

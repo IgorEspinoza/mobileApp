@@ -7,8 +7,10 @@
     {
       "path": "/api/cron/installments/generate",
       "schedule": "0 4 1 * *"
+    },
+    {
+      "path": "/api/cron/email-sync",
+      "schedule": "0 */2 * * *"
     }
   ]
 }
-
-
