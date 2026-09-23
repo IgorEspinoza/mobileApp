@@ -440,6 +440,8 @@ export function htmlToText(html: string): string {
     .replace(/&ndash;/gi, "–")
     .replace(/&mdash;/gi, "—")
     .replace(/&[a-zA-Z]+;/g, " ") // Cualquier otra entidad → espacio
+    // Caracteres invisibles (zero-width spaces, BOM) que bancos insertan.
+    .replace(/[\u200B\u200C\u200D\uFEFF\u00AD]/g, "")
     // Normalizar whitespace.
     .replace(/[ \t]+/g, " ")
     .replace(/\n[ \t]+/g, "\n")
