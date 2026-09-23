@@ -38,10 +38,10 @@ export type ParsedMovement = {
 type SenderRule = { source: string; domains: string[] };
 
 const KNOWN_SENDERS: SenderRule[] = [
-  { source: "banco_chile", domains: ["bancochile.cl", "banchile.cl"] },
+  { source: "banco_chile", domains: ["bancochile.cl", "banchile.cl", "notificaciones.bancochile.cl", "email.bancochile.cl"] },
   { source: "santander", domains: ["santander.cl"] },
   { source: "bci", domains: ["bci.cl", "mach.cl"] },
-  { source: "estado", domains: ["bancoestado.cl", "bancoestado.com"] },
+  { source: "estado", domains: ["bancoestado.cl", "bancoestado.com", "notificaciones.bancoestado.cl"] },
   { source: "itau", domains: ["itau.cl"] },
   { source: "scotiabank", domains: ["scotiabank.cl"] },
   { source: "falabella", domains: ["falabella.cl", "bancofalabella.cl", "cmr.cl"] },

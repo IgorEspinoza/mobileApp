@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     const params = request.nextUrl.searchParams;
-    const mailbox = params.get("mailbox") || "INBOX";
+    const mailboxParam = params.get("mailbox") || null;
     const days = Math.min(Math.max(Number.parseInt(params.get("days") || "30", 10), 1), 365);
     const limit = Math.min(Math.max(Number.parseInt(params.get("limit") || "25", 10), 1), 50);
 
@@ -81,6 +81,10 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Para Gmail, usar All Mail por defecto para ver correos que Gmail filtra.
+    const mailbox = mailboxParam
+      ?? (emailImport.provider === "gmail" ? "__ALL_MAIL__" : "INBOX");
 
     const cfg = getImapConfig(emailImport.provider);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

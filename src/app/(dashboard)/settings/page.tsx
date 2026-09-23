@@ -113,7 +113,7 @@ export default function SettingsPage() {
   // Diagnóstico
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
-  const [mailbox, setMailbox] = useState("__INBOX__");
+  const [mailbox, setMailbox] = useState("__ALL_MAIL__");
   const [days, setDays] = useState(30);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 

@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     // Buzon configurable: en Gmail los correos bancarios suelen estar
     // archivados o filtrados fuera de INBOX ("[Gmail]/All Mail").
-    const mailbox = request.nextUrl.searchParams.get("mailbox") || "INBOX";
+    const mailboxParam = request.nextUrl.searchParams.get("mailbox") || null;
 
     // Permite forzar una ventana historica concreta ignorando last_sync.
     const daysParam = Number.parseInt(request.nextUrl.searchParams.get("days") || "", 10);
@@ -154,6 +154,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Para Gmail, usar All Mail por defecto: captura correos archivados y
+    // filtrados automaticamente (notificaciones bancarias que no llegan a INBOX).
+    const mailbox = mailboxParam
+      ?? (emailImport.provider === "gmail" ? "__ALL_MAIL__" : "INBOX");
 
     const cfg = getImapConfig(emailImport.provider);
     const mailboxResolution = await resolveImapMailbox(
