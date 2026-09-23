@@ -173,7 +173,11 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    // Limpiar sesion del servidor (cookies)
     await fetch("/api/auth/logout", { method: "POST" });
+    // Limpiar sesion del cliente (Supabase JS) para que onAuthStateChange
+    // dispare SIGNED_OUT y el estado quede limpio antes de navegar.
+    await supabase.auth.signOut();
     logout();
     router.push("/login");
   };
