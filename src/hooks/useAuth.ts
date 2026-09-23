@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/authStore";
 import type { User } from "@/types/database";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 export function useAuth() {
-  const router = useRouter();
   const { user, isLoading, error, setUser, setLoading, setError, logout } =
     useAuthStore();
 
@@ -46,7 +44,8 @@ export function useAuth() {
       } else if (event === "SIGNED_OUT") {
         logout();
         setLoading(false);
-        router.push("/login");
+        // No navegar aqui — signOut() maneja la navegacion con hard reload.
+        // router.push causa race condition con el middleware que aun ve cookies.
       }
     });
 
@@ -173,13 +172,23 @@ export function useAuth() {
   };
 
   const signOut = async () => {
-    // Limpiar sesion del servidor (cookies)
-    await fetch("/api/auth/logout", { method: "POST" });
-    // Limpiar sesion del cliente (Supabase JS) para que onAuthStateChange
-    // dispare SIGNED_OUT y el estado quede limpio antes de navegar.
-    await supabase.auth.signOut();
-    logout();
-    router.push("/login");
+    // Evitar doble ejecucion si el usuario hace click multiples veces
+    if (useAuthStore.getState().isLoading) return;
+    setLoading(true);
+    try {
+      // Limpiar sesion del servidor (cookies)
+      await fetch("/api/auth/logout", { method: "POST" });
+      // Limpiar sesion del cliente
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error during sign out:", err);
+    } finally {
+      logout();
+      // Usar hard navigation para que el navegador descarte las cookies viejas.
+      // router.push("/login") hace client-side nav y el middleware puede
+      // redirigir de vuelta a /dashboard si las cookies no se limpiaron a tiempo.
+      window.location.href = "/login";
+    }
   };
 
   const resetPassword = async (email: string) => {
