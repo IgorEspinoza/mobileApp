@@ -357,9 +357,42 @@ type MovementType = "expense" | "income" | "installment" | null;
  * Correos informativos o promocionales que nunca son un movimiento, aunque
  * vengan de un banco reconocido (estados de cuenta, saldos, promociones).
  */
+/**
+ * Un correo es ignorable solo si el ASUNTO indica que es informativo
+ * (estado de cuenta, promocion, etc.). Si las palabras clave de descarte
+ * aparecen solo en el cuerpo (ej. "Saldo disponible: $X" al pie de un
+ * aviso de cargo), el correo NO se descarta: las frases de saldo en el
+ * cuerpo se eliminan mas adelante para que no contaminen la extraccion
+ * del monto de la transaccion.
+ */
 function isIgnorable(text: string): boolean {
   const normalized = normalizeText(text);
-  return IGNORE_HINTS.some((hint) => normalized.includes(hint));
+
+  // Separar asunto (primera linea) del cuerpo.
+  const firstNewline = normalized.indexOf("\n");
+  const subject = firstNewline >= 0 ? normalized.slice(0, firstNewline) : normalized;
+
+  // Si el asunto contiene una palabra de descarte, es un correo informativo.
+  if (IGNORE_HINTS.some((hint) => subject.includes(hint))) {
+    return true;
+  }
+
+  // Si el asunto tiene keywords transaccionales, no ignorar aunque el cuerpo
+  // mencione saldos o cupos.
+  const hasTransactionInSubject = [...EXPENSE_HINTS, ...INCOME_HINTS].some(
+    (hint) => subject.includes(hint)
+  );
+  if (hasTransactionInSubject) {
+    return false;
+  }
+
+  // Sin keywords transaccionales en el asunto, revisar si el texto completo
+  // es solo informativo (pero excluir "saldo/cupo disponible" que suelen
+  // aparecer al pie de cualquier correo bancario).
+  const BODY_SAFE_IGNORE_HINTS = IGNORE_HINTS.filter(
+    (h) => !["saldo disponible", "cupo disponible"].includes(h)
+  );
+  return BODY_SAFE_IGNORE_HINTS.some((hint) => normalized.includes(hint));
 }
 
 function detectType(text: string): MovementType {
