@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient();
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
       .select("id, date, amount, source, description")
       .eq("user_id", user.id)
       .order("date", { ascending: false })
-      .limit(Math.ceil(limitNum / 2));
+      .limit(limitNum);
 
     const incomes = incomesData ?? [];
 
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
       .eq("user_id", user.id)
       .eq("is_shared", false)
       .order("date", { ascending: false })
-      .limit(Math.ceil(limitNum / 2));
+      .limit(limitNum);
 
     const expenses = expensesData ?? [];
 

@@ -103,17 +103,27 @@ export async function DELETE(
       );
     }
 
-    // Eliminar ingreso
-    const { error } = await supabase
+    // Usar .select() para verificar que realmente se eliminó algo
+    const { data: deleted, error } = await supabase
       .from("incomes")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .select();
 
     if (error) {
+      console.error("Income delete DB error:", error);
       return NextResponse.json(
         { error: "Error al eliminar ingreso: " + error.message },
         { status: 400 }
+      );
+    }
+
+    if (!deleted || deleted.length === 0) {
+      console.error("Income delete: no rows affected", { id, user_id: user.id });
+      return NextResponse.json(
+        { error: "No se encontró el ingreso o no tienes permiso para eliminarlo" },
+        { status: 404 }
       );
     }
 

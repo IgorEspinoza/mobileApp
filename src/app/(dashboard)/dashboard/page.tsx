@@ -113,7 +113,7 @@ export default function DashboardPage() {
           Mi Dinero
         </h1>
         <p className="mt-2 text-slate-300 xl:text-base">
-          Resumen financiero de este mes
+          Resumen financiero
         </p>
       </div>
 
