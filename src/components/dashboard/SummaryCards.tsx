@@ -8,6 +8,11 @@ interface SummaryCardsProps {
   expenses: number;
   savings: number;
   freeBalance: number;
+  accumulated?: {
+    incomes: number;
+    expenses: number;
+    balance: number;
+  };
   isLoading?: boolean;
 }
 
@@ -22,6 +27,7 @@ export function SummaryCards({
   expenses,
   savings,
   freeBalance,
+  accumulated,
   isLoading = false,
 }: SummaryCardsProps) {
   const cards = [
@@ -68,19 +74,63 @@ export function SummaryCards({
     );
   }
 
+  const accumulatedCards = accumulated
+    ? [
+        {
+          emoji: "📊",
+          label: "Total Ingresos",
+          value: accumulated.incomes,
+          color: "text-green-400",
+        },
+        {
+          emoji: "📉",
+          label: "Total Gastos",
+          value: accumulated.expenses,
+          color: "text-red-400",
+        },
+        {
+          emoji: "🏦",
+          label: "Balance General",
+          value: accumulated.balance,
+          color: accumulated.balance >= 0 ? "text-emerald-400" : "text-orange-400",
+        },
+      ]
+    : [];
+
   return (
-    <div className="space-y-2">
-      <h2 className="text-sm font-semibold text-slate-300">Este Mes: {month}</h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <div key={card.label} className={CARD_STYLE}>
-            <div className="text-3xl">{card.emoji}</div>
-            <div className={LABEL_STYLE}>{card.label}</div>
-            <div className={`${VALUE_STYLE} ${card.color}`}>
-              {formatCurrency(card.value)}
-            </div>
+    <div className="space-y-6">
+      {/* Totales acumulados */}
+      {accumulated && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-300">Resumen General</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {accumulatedCards.map((card) => (
+              <div key={card.label} className={CARD_STYLE}>
+                <div className="text-3xl">{card.emoji}</div>
+                <div className={LABEL_STYLE}>{card.label}</div>
+                <div className={`${VALUE_STYLE} ${card.color}`}>
+                  {formatCurrency(card.value)}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* Resumen del mes actual */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-slate-300">Este Mes: {month}</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {cards.map((card) => (
+            <div key={card.label} className={CARD_STYLE}>
+              <div className="text-3xl">{card.emoji}</div>
+              <div className={LABEL_STYLE}>{card.label}</div>
+              <div className={`${VALUE_STYLE} ${card.color}`}>
+                {formatCurrency(card.value)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

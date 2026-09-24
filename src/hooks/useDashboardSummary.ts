@@ -9,6 +9,11 @@ interface DashboardSummary {
   expenses: number;
   savings: number;
   freeBalance: number;
+  accumulated: {
+    incomes: number;
+    expenses: number;
+    balance: number;
+  };
   data: {
     incomeCount: number;
     expenseCount: number;

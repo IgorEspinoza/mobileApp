@@ -30,7 +30,7 @@ export default function DashboardPage() {
     transactions,
     isLoading: txLoading,
     refetch: refetchTransactions,
-  } = useRecentTransactions(5);
+  } = useRecentTransactions(10);
   const { createIncome, isLoading: incomeLoading } = useIncomes();
   const { createExpense, isLoading: expenseLoading } = useExpenses();
   const {
@@ -136,6 +136,7 @@ export default function DashboardPage() {
           expenses={summary.expenses}
           savings={summary.savings}
           freeBalance={summary.freeBalance}
+          accumulated={summary.accumulated}
           isLoading={summaryLoading}
         />
       )}

@@ -108,6 +108,27 @@ export async function GET() {
     const savings = totalIncomes - totalExpenses;
     const freeBalance = totalIncomes - totalExpenses;
 
+    // --- Totales acumulados (todas las fechas) ---
+    const { data: allIncomesData } = await supabase
+      .from("incomes")
+      .select("amount")
+      .eq("user_id", user.id);
+
+    const { data: allExpensesData } = await supabase
+      .from("expenses")
+      .select("amount")
+      .eq("user_id", user.id)
+      .eq("is_shared", false);
+
+    const accumulatedIncomes = (allIncomesData ?? []).reduce(
+      (sum, inc) => sum + (inc.amount || 0),
+      0
+    );
+    const accumulatedExpenses = (allExpensesData ?? []).reduce(
+      (sum, exp) => sum + (exp.amount || 0),
+      0
+    );
+
     return NextResponse.json(
       {
         month: monthLabel,
@@ -115,6 +136,11 @@ export async function GET() {
         expenses: totalExpenses,
         savings,
         freeBalance,
+        accumulated: {
+          incomes: accumulatedIncomes,
+          expenses: accumulatedExpenses,
+          balance: accumulatedIncomes - accumulatedExpenses,
+        },
         data: {
           incomeCount: incomes.length,
           expenseCount: expenses.length,
