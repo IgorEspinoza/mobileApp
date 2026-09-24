@@ -26,7 +26,6 @@ export async function GET() {
       year: "numeric",
       month: "long",
     });
-    const currentMonthFirst = startDate; // YYYY-MM-DD first of current month
 
     // 1. Obtener ingresos del periodo
     let { data: incomesData } = await supabase
