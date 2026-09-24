@@ -449,6 +449,34 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+
+/** Decodifica entidades HTML que pueden aparecer en texto plano (mailparser a veces las deja). */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&dollar;/gi, "$")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&iacute;/gi, "í")
+    .replace(/&aacute;/gi, "á")
+    .replace(/&eacute;/gi, "é")
+    .replace(/&oacute;/gi, "ó")
+    .replace(/&uacute;/gi, "ú")
+    .replace(/&ntilde;/gi, "ñ")
+    .replace(/&iquest;/gi, "¿")
+    .replace(/&iexcl;/gi, "¡")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&zwj;/gi, "")  // zero-width joiner — remove
+    .replace(/&zwnj;/gi, "") // zero-width non-joiner — remove
+    .replace(/&[a-zA-Z]+;/g, " "); // Cualquier otra entidad → espacio
+}
+
 /**
  * Analiza un correo y devuelve el movimiento detectado, o `null` si el correo
  * no corresponde a una transaccion (promociones, estados de cuenta, etc.).
@@ -456,7 +484,7 @@ export function htmlToText(html: string): string {
 export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   const body = /<[a-z][\s\S]*>/i.test(email.body)
     ? htmlToText(email.body)
-    : email.body;
+    : decodeHtmlEntities(email.body);
 
   const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
@@ -527,7 +555,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
 export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
   const body = /<[a-z][\s\S]*>/i.test(email.body)
     ? htmlToText(email.body)
-    : email.body;
+    : decodeHtmlEntities(email.body);
 
   const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";

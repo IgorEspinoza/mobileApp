@@ -216,12 +216,6 @@ async function syncUserEmails(
     }
   }
 
-  if (newCandidates.length === 0) {
-    // Actualizar last_sync aunque no haya nada nuevo
-    await supabaseAdmin.from("email_imports").update({ last_sync: new Date().toISOString() }).eq("id", emailImport.id);
-    return result;
-  }
-
   // --- Insertar clasificaciones y auto-aprobar ---
   for (const c of newCandidates) {
     const shouldAutoApprove =
