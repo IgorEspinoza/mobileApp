@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { CreateFixedExpenseSchema } from "@/lib/validations/schemas";
 
-export async function GET(_request: NextRequest) {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -11,11 +13,25 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: "Sin autenticación" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const month = searchParams.get("month"); // format: YYYY-MM-DD (first of month)
+    const homeId = searchParams.get("home_id");
+
+    let query = supabase
       .from("fixed_expenses")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+
+    if (month) {
+      query = query.eq("month", month);
+    }
+
+    if (homeId) {
+      query = query.eq("home_id", homeId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -46,17 +62,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sin autenticación" }, { status: 401 });
     }
 
+    // Check for duplicate (same category + month)
+    if (validated.data.month) {
+      const { data: existing } = await supabase
+        .from("fixed_expenses")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("category", validated.data.category)
+        .eq("month", validated.data.month)
+        .maybeSingle();
+
+      if (existing) {
+        return NextResponse.json(
+          { error: `Ya existe un registro de ${validated.data.category} para este mes` },
+          { status: 409 }
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from("fixed_expenses")
       .insert({
         user_id: user.id,
+        home_id: validated.data.home_id ?? null,
         category: validated.data.category,
         amount: validated.data.amount,
-        frequency: validated.data.frequency,
-        start_date: validated.data.start_date,
-        end_date: validated.data.end_date ?? null,
-        description: validated.data.description ?? null,
+        frequency: "monthly",
+        month: validated.data.month,
+        start_date: validated.data.month,
         is_active: true,
+        description: validated.data.description ?? null,
       })
       .select()
       .single();
@@ -74,4 +109,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
-

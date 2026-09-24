@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+import { FIXED_EXPENSE_CATEGORIES, FIXED_CATEGORY_EMOJIS } from "@/lib/utils/constants";
 
 export interface FixedExpenseFormData {
   category: string;
   amount: number;
-  frequency: "monthly" | "weekly";
-  start_date: string;
-  end_date?: string;
+  month: string;
+  home_id?: string;
   description?: string;
 }
 
@@ -17,6 +16,7 @@ interface FixedExpenseFormProps {
   isLoading?: boolean;
   onClose?: () => void;
   initialData?: Partial<FixedExpenseFormData>;
+  homeId?: string;
 }
 
 export function FixedExpenseForm({
@@ -24,13 +24,16 @@ export function FixedExpenseForm({
   isLoading = false,
   onClose,
   initialData,
+  homeId,
 }: FixedExpenseFormProps) {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
   const [formData, setFormData] = useState<FixedExpenseFormData>({
-    category: initialData?.category ?? "Otros",
+    category: initialData?.category ?? "Arriendo",
     amount: initialData?.amount ?? 0,
-    frequency: initialData?.frequency ?? "monthly",
-    start_date: initialData?.start_date ?? new Date().toISOString().split("T")[0],
-    end_date: initialData?.end_date ?? "",
+    month: initialData?.month ?? defaultMonth,
+    home_id: homeId,
     description: initialData?.description ?? "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +50,6 @@ export function FixedExpenseForm({
     try {
       await onSubmit({
         ...formData,
-        end_date: formData.end_date || undefined,
         description: formData.description || undefined,
       });
       onClose?.();
@@ -59,22 +61,55 @@ export function FixedExpenseForm({
   const set = (field: Partial<FixedExpenseFormData>) =>
     setFormData((prev) => ({ ...prev, ...field }));
 
+  // Generate month options (last 12 months + next 2)
+  const monthOptions: { value: string; label: string }[] = [];
+  for (let i = -12; i <= 2; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    const label = d.toLocaleDateString("es-CL", { year: "numeric", month: "long" });
+    monthOptions.push({ value, label });
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Categoría */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Categoría
+          Tipo de gasto fijo
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {FIXED_EXPENSE_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => set({ category: cat })}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                formData.category === cat
+                  ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                  : "border-slate-600 bg-slate-700/50 text-slate-300 hover:border-slate-500"
+              }`}
+            >
+              <span>{FIXED_CATEGORY_EMOJIS[cat] ?? "📌"}</span>
+              <span>{cat}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mes */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+          Mes del pago
         </label>
         <select
-          value={formData.category}
-          onChange={(e) => set({ category: e.target.value })}
+          value={formData.month}
+          onChange={(e) => set({ month: e.target.value })}
           className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white
                      focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
         >
-          {EXPENSE_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
+          {monthOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>
@@ -83,64 +118,16 @@ export function FixedExpenseForm({
       {/* Monto */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Monto
+          Monto (CLP)
         </label>
         <input
           type="number"
-          step="0.01"
+          step="1"
           value={formData.amount || ""}
           onChange={(e) => set({ amount: parseFloat(e.target.value) || 0 })}
-          placeholder="0"
+          placeholder="Ej: 163037"
           required
           className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500
-                     focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-        />
-      </div>
-
-      {/* Frecuencia */}
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Frecuencia
-        </label>
-        <select
-          value={formData.frequency}
-          onChange={(e) =>
-            set({ frequency: e.target.value as "monthly" | "weekly" })
-          }
-          className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white
-                     focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-        >
-          <option value="monthly">Mensual</option>
-          <option value="weekly">Semanal</option>
-        </select>
-      </div>
-
-      {/* Fecha inicio */}
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Fecha de inicio
-        </label>
-        <input
-          type="date"
-          value={formData.start_date}
-          onChange={(e) => set({ start_date: e.target.value })}
-          required
-          className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white
-                     focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-        />
-      </div>
-
-      {/* Fecha fin (opcional) */}
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Fecha de término{" "}
-          <span className="text-slate-500 font-normal">(opcional)</span>
-        </label>
-        <input
-          type="date"
-          value={formData.end_date ?? ""}
-          onChange={(e) => set({ end_date: e.target.value })}
-          className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white
                      focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
         />
       </div>
@@ -148,14 +135,14 @@ export function FixedExpenseForm({
       {/* Descripción */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Descripción{" "}
+          Nota{" "}
           <span className="text-slate-500 font-normal">(opcional)</span>
         </label>
         <input
           type="text"
           value={formData.description ?? ""}
           onChange={(e) => set({ description: e.target.value })}
-          placeholder="Ej: Arriendo departamento"
+          placeholder="Ej: Incluye calefacción"
           className="w-full px-4 py-3 min-h-[44px] rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500
                      focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
         />
@@ -189,4 +176,3 @@ export function FixedExpenseForm({
     </form>
   );
 }
-

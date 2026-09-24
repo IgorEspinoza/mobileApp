@@ -134,6 +134,8 @@ export default function DashboardPage() {
           month={summary.month}
           incomes={summary.incomes}
           expenses={summary.expenses}
+          fixedExpenses={summary.fixedExpenses}
+          totalExpenses={summary.totalExpenses}
           savings={summary.savings}
           freeBalance={summary.freeBalance}
           accumulated={summary.accumulated}

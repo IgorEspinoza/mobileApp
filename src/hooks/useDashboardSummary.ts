@@ -7,6 +7,8 @@ interface DashboardSummary {
   month: string;
   incomes: number;
   expenses: number;
+  fixedExpenses: number;
+  totalExpenses: number;
   savings: number;
   freeBalance: number;
   accumulated: {
@@ -17,6 +19,7 @@ interface DashboardSummary {
   data: {
     incomeCount: number;
     expenseCount: number;
+    fixedExpenseCount: number;
   };
 }
 
@@ -45,12 +48,10 @@ export function useDashboardSummary() {
     }
   }, []);
 
-  // Refetch on mount and when navigating back to this page
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary, pathname]);
 
-  // Refetch when the window regains focus (e.g. user was on another tab/page)
   useEffect(() => {
     const handleFocus = () => {
       fetchSummary();

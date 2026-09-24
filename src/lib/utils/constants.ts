@@ -44,6 +44,28 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Otros: "#6b7280",
 };
 
+
+// Fixed Expense Categories (gastos fijos del hogar)
+export const FIXED_EXPENSE_CATEGORIES = [
+  "Arriendo",
+  "Gastos Comunes",
+  "Luz",
+  "Agua",
+  "Gas",
+  "Internet",
+  "Otros Fijos",
+] as const;
+
+export const FIXED_CATEGORY_EMOJIS: Record<string, string> = {
+  Arriendo: "🏠",
+  "Gastos Comunes": "🏢",
+  Luz: "💡",
+  Agua: "💧",
+  Gas: "🔥",
+  Internet: "🌐",
+  "Otros Fijos": "📌",
+};
+
 // Income Sources
 export const INCOME_SOURCES = ["salary", "bonus", "other"] as const;
 

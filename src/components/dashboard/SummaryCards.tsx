@@ -6,6 +6,8 @@ interface SummaryCardsProps {
   month: string;
   incomes: number;
   expenses: number;
+  fixedExpenses?: number;
+  totalExpenses?: number;
   savings: number;
   freeBalance: number;
   accumulated?: {
@@ -17,26 +19,27 @@ interface SummaryCardsProps {
 }
 
 const CARD_STYLE =
-  "rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-6 shadow-lg xl:p-7";
-const VALUE_STYLE = "mt-2 text-3xl font-bold text-white xl:text-4xl";
-const LABEL_STYLE = "text-sm font-medium text-slate-300";
+  "rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-5 shadow-lg";
+const VALUE_STYLE = "mt-2 text-2xl font-bold text-white xl:text-3xl";
+const LABEL_STYLE = "text-xs font-medium text-slate-300";
 
 export function SummaryCards({
   month,
   incomes,
   expenses,
+  fixedExpenses = 0,
   savings,
   accumulated,
   isLoading = false,
 }: SummaryCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:gap-5">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[...Array(5)].map((_, i) => (
           <div key={i} className={`${CARD_STYLE} animate-pulse`}>
-            <div className="h-8 w-8 rounded bg-slate-700" />
-            <div className="mt-2 h-4 w-24 rounded bg-slate-700" />
-            <div className="mt-4 h-8 w-32 rounded bg-slate-700" />
+            <div className="h-6 w-6 rounded bg-slate-700" />
+            <div className="mt-2 h-3 w-20 rounded bg-slate-700" />
+            <div className="mt-3 h-7 w-28 rounded bg-slate-700" />
           </div>
         ))}
       </div>
@@ -46,26 +49,32 @@ export function SummaryCards({
   const cards = [
     {
       emoji: "💰",
-      label: `Ingresos - ${month}`,
+      label: `Ingresos`,
       value: incomes,
       color: "text-green-400",
     },
     {
-      emoji: "💸",
-      label: `Gastos - ${month}`,
+      emoji: "🛒",
+      label: `Gastos Variables`,
       value: expenses,
       color: "text-red-400",
     },
     {
+      emoji: "🏠",
+      label: `Gastos Fijos`,
+      value: fixedExpenses,
+      color: "text-orange-400",
+    },
+    {
       emoji: "💎",
-      label: `Balance - ${month}`,
+      label: `Balance`,
       value: savings,
-      color: savings >= 0 ? "text-emerald-400" : "text-orange-400",
+      color: savings >= 0 ? "text-emerald-400" : "text-red-400",
     },
     {
       emoji: "🏦",
-      label: "Gastos Acumulados",
-      value: accumulated?.expenses ?? expenses,
+      label: "Acumulado",
+      value: accumulated?.expenses ?? expenses + fixedExpenses,
       color: "text-red-300",
       subtitle: "Total histórico",
     },
@@ -73,11 +82,13 @@ export function SummaryCards({
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-semibold text-slate-300">Resumen Financiero</h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <h2 className="text-sm font-semibold text-slate-300">
+        Resumen Financiero — {month}
+      </h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {cards.map((card) => (
           <div key={card.label} className={CARD_STYLE}>
-            <div className="text-3xl">{card.emoji}</div>
+            <div className="text-2xl">{card.emoji}</div>
             <div className={LABEL_STYLE}>{card.label}</div>
             <div className={`${VALUE_STYLE} ${card.color}`}>
               {formatCurrency(card.value)}

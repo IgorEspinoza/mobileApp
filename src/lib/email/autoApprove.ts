@@ -1,4 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+
+/** Categorías que se redirigen a la tabla fixed_expenses en vez de expenses. */
+const FIXED_CATEGORIES = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
 /** Umbral de confianza para auto-aprobar sin revisión manual. */
 export const AUTO_APPROVE_CONFIDENCE = 0.85;
@@ -60,31 +64,66 @@ export async function autoApproveClassifications(
     const merchant = row.merchant || row.subject || "Sin comercio";
 
     if (row.detected_type === "expense") {
-      const { data: expense, error: expError } = await supabaseAdmin
-        .from("expenses")
-        .insert({
-          user_id: row.user_id,
-          date: row.transaction_date,
-          merchant,
-          amount: row.amount,
-          category: row.predicted_category || "Otros",
-          description,
-          is_shared: false,
-        })
-        .select("id")
-        .single();
+      const category = row.predicted_category || "Otros";
+      const isFixedExpense = FIXED_CATEGORIES.has(category);
 
-      if (expError) {
-        errors.push(`Expense: ${expError.message}`);
-        continue;
+      if (isFixedExpense) {
+        // Gastos fijos van a la tabla fixed_expenses con el mes correspondiente
+        const txDate = new Date(row.transaction_date);
+        const month = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, "0")}-01`;
+
+        const { error: fixedError } = await supabaseAdmin
+          .from("fixed_expenses")
+          .insert({
+            user_id: row.user_id,
+            category,
+            amount: row.amount,
+            month,
+            description,
+            frequency: "monthly",
+            start_date: month,
+          });
+
+        if (fixedError) {
+          errors.push(`FixedExpense: ${fixedError.message}`);
+          continue;
+        }
+
+        await supabaseAdmin
+          .from("expense_classifications")
+          .update({ manual_category: category })
+          .eq("id", row.id);
+
+        approved += 1;
+
+      } else {
+        // Gastos variables van a la tabla expenses
+        const { data: expense, error: expError } = await supabaseAdmin
+          .from("expenses")
+          .insert({
+            user_id: row.user_id,
+            date: row.transaction_date,
+            merchant,
+            amount: row.amount,
+            category,
+            description,
+            is_shared: false,
+          })
+          .select("id")
+          .single();
+
+        if (expError) {
+          errors.push(`Expense: ${expError.message}`);
+          continue;
+        }
+
+        await supabaseAdmin
+          .from("expense_classifications")
+          .update({ expense_id: expense.id, manual_category: category })
+          .eq("id", row.id);
+
+        approved += 1;
       }
-
-      await supabaseAdmin
-        .from("expense_classifications")
-        .update({ expense_id: expense.id, manual_category: row.predicted_category || "Otros" })
-        .eq("id", row.id);
-
-      approved += 1;
 
     } else if (row.detected_type === "income") {
       const { error: incError } = await supabaseAdmin

@@ -16,7 +16,6 @@ export async function GET() {
       return NextResponse.json({ error: "Sin autenticación" }, { status: 401 });
     }
 
-    // Primero intentamos el mes actual
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -27,6 +26,7 @@ export async function GET() {
       year: "numeric",
       month: "long",
     });
+    const currentMonthFirst = startDate; // YYYY-MM-DD first of current month
 
     // 1. Obtener ingresos del periodo
     let { data: incomesData } = await supabase
@@ -36,7 +36,7 @@ export async function GET() {
       .gte("date", startDate)
       .lte("date", endDate);
 
-    // 2. Obtener gastos personales del periodo
+    // 2. Obtener gastos personales del periodo (excluir gastos fijos tipo "Gastos Comunes" etc.)
     let { data: expensesData } = await supabase
       .from("expenses")
       .select("*")
@@ -50,7 +50,6 @@ export async function GET() {
 
     // Si no hay datos este mes, buscar el mes más reciente con datos
     if (incomes.length === 0 && expenses.length === 0) {
-      // Buscar la transacción más reciente
       const { data: latestExpense } = await supabase
         .from("expenses")
         .select("date")
@@ -82,7 +81,6 @@ export async function GET() {
           month: "long",
         });
 
-        // Re-fetch con el mes correcto
         const { data: altIncomes } = await supabase
           .from("incomes")
           .select("*")
@@ -105,8 +103,21 @@ export async function GET() {
 
     const totalIncomes = incomes.reduce((sum, inc) => sum + (inc.amount || 0), 0);
     const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-    const savings = totalIncomes - totalExpenses;
-    const freeBalance = totalIncomes - totalExpenses;
+
+    // 3. Obtener gastos fijos del mes
+    const displayMonthFirst = startDate; // first of the displayed month
+    const { data: fixedExpensesData } = await supabase
+      .from("fixed_expenses")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("month", displayMonthFirst);
+
+    const fixedExpenses = fixedExpensesData ?? [];
+    const totalFixed = fixedExpenses.reduce((sum, fe) => sum + (fe.amount || 0), 0);
+
+    // Total real del mes = gastos variables + gastos fijos
+    const totalAllExpenses = totalExpenses + totalFixed;
+    const savings = totalIncomes - totalAllExpenses;
 
     // --- Totales acumulados (todas las fechas) ---
     const { data: allIncomesData } = await supabase
@@ -120,6 +131,11 @@ export async function GET() {
       .eq("user_id", user.id)
       .eq("is_shared", false);
 
+    const { data: allFixedData } = await supabase
+      .from("fixed_expenses")
+      .select("amount")
+      .eq("user_id", user.id);
+
     const accumulatedIncomes = (allIncomesData ?? []).reduce(
       (sum, inc) => sum + (inc.amount || 0),
       0
@@ -128,22 +144,29 @@ export async function GET() {
       (sum, exp) => sum + (exp.amount || 0),
       0
     );
+    const accumulatedFixed = (allFixedData ?? []).reduce(
+      (sum, fe) => sum + (fe.amount || 0),
+      0
+    );
 
     return NextResponse.json(
       {
         month: monthLabel,
         incomes: totalIncomes,
         expenses: totalExpenses,
+        fixedExpenses: totalFixed,
+        totalExpenses: totalAllExpenses,
         savings,
-        freeBalance,
+        freeBalance: savings,
         accumulated: {
           incomes: accumulatedIncomes,
-          expenses: accumulatedExpenses,
-          balance: accumulatedIncomes - accumulatedExpenses,
+          expenses: accumulatedExpenses + accumulatedFixed,
+          balance: accumulatedIncomes - accumulatedExpenses - accumulatedFixed,
         },
         data: {
           incomeCount: incomes.length,
           expenseCount: expenses.length,
+          fixedExpenseCount: fixedExpenses.length,
         },
       },
       { status: 200 }

@@ -5,9 +5,11 @@ import { useState, useCallback } from "react";
 export interface FixedExpense {
   id: string;
   user_id: string;
+  home_id?: string | null;
   category: string;
   amount: number;
   frequency: "monthly" | "weekly";
+  month?: string | null;
   start_date: string;
   end_date?: string | null;
   is_active: boolean;
@@ -20,16 +22,22 @@ export function useFixedExpenses() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFixedExpenses = useCallback(async () => {
+  const fetchFixedExpenses = useCallback(async (month?: string, homeId?: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/fixed-expenses");
+      const params = new URLSearchParams();
+      if (month) params.set("month", month);
+      if (homeId) params.set("home_id", homeId);
+      const qs = params.toString();
+      const res = await fetch(`/api/fixed-expenses${qs ? `?${qs}` : ""}`);
       if (!res.ok) throw new Error("Error al cargar gastos fijos");
       const data = await res.json();
       setFixedExpenses(data.fixed_expenses ?? []);
+      return data.fixed_expenses ?? [];
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -38,9 +46,8 @@ export function useFixedExpenses() {
   const createFixedExpense = async (data: {
     category: string;
     amount: number;
-    frequency: "monthly" | "weekly";
-    start_date: string;
-    end_date?: string;
+    month: string;
+    home_id?: string;
     description?: string;
   }) => {
     setIsLoading(true);
@@ -72,11 +79,8 @@ export function useFixedExpenses() {
     data: {
       category: string;
       amount: number;
-      frequency: "monthly" | "weekly";
-      start_date: string;
-      end_date?: string;
+      month?: string;
       description?: string;
-      is_active?: boolean;
     }
   ) => {
     setIsLoading(true);
@@ -124,19 +128,10 @@ export function useFixedExpenses() {
     }
   };
 
-  const toggleActive = async (id: string, currentlyActive: boolean) => {
-    const fe = fixedExpenses.find((f) => f.id === id);
-    if (!fe) return;
-    await updateFixedExpense(id, {
-      category: fe.category,
-      amount: fe.amount,
-      frequency: fe.frequency,
-      start_date: fe.start_date,
-      end_date: fe.end_date ?? undefined,
-      description: fe.description ?? undefined,
-      is_active: !currentlyActive,
-    });
-  };
+  // Get total fixed expenses for a given month
+  const getMonthlyTotal = useCallback(() => {
+    return fixedExpenses.reduce((sum, fe) => sum + (fe.amount || 0), 0);
+  }, [fixedExpenses]);
 
   return {
     fixedExpenses,
@@ -147,7 +142,6 @@ export function useFixedExpenses() {
     createFixedExpense,
     updateFixedExpense,
     deleteFixedExpense,
-    toggleActive,
+    getMonthlyTotal,
   };
 }
-

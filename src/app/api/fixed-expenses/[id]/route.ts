@@ -3,10 +3,10 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const supabase = await createServerClient();
@@ -16,7 +16,6 @@ export async function PUT(
       return NextResponse.json({ error: "Sin autenticación" }, { status: 401 });
     }
 
-    // Verificar propiedad
     const { data: existing, error: fetchError } = await supabase
       .from("fixed_expenses")
       .select("id")
@@ -33,11 +32,8 @@ export async function PUT(
       .update({
         category: body.category,
         amount: body.amount,
-        frequency: body.frequency,
-        start_date: body.start_date,
-        end_date: body.end_date ?? null,
+        month: body.month ?? null,
         description: body.description ?? null,
-        is_active: body.is_active ?? true,
       })
       .eq("id", id)
       .eq("user_id", user.id)
@@ -60,10 +56,10 @@ export async function PUT(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -72,7 +68,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Sin autenticación" }, { status: 401 });
     }
 
-    // Verificar propiedad
     const { data: existing, error: fetchError } = await supabase
       .from("fixed_expenses")
       .select("id")
@@ -103,4 +98,3 @@ export async function DELETE(
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }
-

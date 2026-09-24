@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { ApproveEmailClassificationSchema } from "@/lib/validations/schemas";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+
+const FIXED_CATEGORIES = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
 /**
  * Aprueba una clasificación pendiente y la convierte en:
@@ -94,43 +97,91 @@ export async function POST(
         classification.predicted_category ||
         "Otros";
 
-      const { data: expense, error: expenseError } = await supabase
-        .from("expenses")
-        .insert({
-          user_id: user.id,
-          date: payload.date,
-          merchant: merchantFromSource,
-          amount: payload.amount,
-          category,
-          description,
-          is_shared: false,
-        })
-        .select()
-        .single();
+      const isFixedExpense = FIXED_CATEGORIES.has(category);
 
-      if (expenseError || !expense) {
-        return NextResponse.json(
-          { error: `Error al crear gasto: ${expenseError?.message || "sin detalle"}` },
-          { status: 400 }
-        );
-      }
+      if (isFixedExpense) {
+        // Gastos fijos van a la tabla fixed_expenses
+        const txDate = new Date(payload.date);
+        const month = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, "0")}-01`;
 
-      createdRecord = expense as unknown as Record<string, unknown>;
+        const { data: fixedExpense, error: fixedError } = await supabase
+          .from("fixed_expenses")
+          .insert({
+            user_id: user.id,
+            category,
+            amount: payload.amount,
+            month,
+            description,
+            frequency: "monthly",
+            start_date: month,
+          })
+          .select()
+          .single();
 
-      const { error: updateError } = await supabase
-        .from("expense_classifications")
-        .update({
-          status: "manual_classified",
-          manual_category: category,
-          expense_id: expense.id,
-        })
-        .eq("id", id);
+        if (fixedError || !fixedExpense) {
+          return NextResponse.json(
+            { error: `Error al crear gasto fijo: ${fixedError?.message || "sin detalle"}` },
+            { status: 400 }
+          );
+        }
 
-      if (updateError) {
-        return NextResponse.json(
-          { error: `Gasto creado, pero no se pudo actualizar clasificación: ${updateError.message}` },
-          { status: 400 }
-        );
+        createdRecord = fixedExpense as unknown as Record<string, unknown>;
+
+        const { error: updateError } = await supabase
+          .from("expense_classifications")
+          .update({
+            status: "manual_classified",
+            manual_category: category,
+          })
+          .eq("id", id);
+
+        if (updateError) {
+          return NextResponse.json(
+            { error: `Gasto fijo creado, pero no se pudo actualizar clasificación: ${updateError.message}` },
+            { status: 400 }
+          );
+        }
+
+      } else {
+        // Gastos variables van a la tabla expenses
+        const { data: expense, error: expenseError } = await supabase
+          .from("expenses")
+          .insert({
+            user_id: user.id,
+            date: payload.date,
+            merchant: merchantFromSource,
+            amount: payload.amount,
+            category,
+            description,
+            is_shared: false,
+          })
+          .select()
+          .single();
+
+        if (expenseError || !expense) {
+          return NextResponse.json(
+            { error: `Error al crear gasto: ${expenseError?.message || "sin detalle"}` },
+            { status: 400 }
+          );
+        }
+
+        createdRecord = expense as unknown as Record<string, unknown>;
+
+        const { error: updateError } = await supabase
+          .from("expense_classifications")
+          .update({
+            status: "manual_classified",
+            manual_category: category,
+            expense_id: expense.id,
+          })
+          .eq("id", id);
+
+        if (updateError) {
+          return NextResponse.json(
+            { error: `Gasto creado, pero no se pudo actualizar clasificación: ${updateError.message}` },
+            { status: 400 }
+          );
+        }
       }
     }
 
