@@ -250,7 +250,7 @@ async function syncUserEmails(
       classified_by: "rules",
     };
 
-    const { data: inserted, error: insertError } = await supabaseAdmin
+    const { data: _inserted, error: insertError } = await supabaseAdmin
       .from("expense_classifications")
       .insert(classificationRow)
       .select("id")
