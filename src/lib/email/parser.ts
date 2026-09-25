@@ -159,10 +159,34 @@ function stripNonTransactionAmounts(text: string): string {
   return cleaned;
 }
 
+/**
+ * Patrones prioritarios: cuando el correo tiene un "total pagado" o similar,
+ * ese es el monto real (incluye cargos por servicio, intereses, etc.).
+ */
+const TOTAL_PAID_PATTERNS: RegExp[] = [
+  /total\s+pagado\s*:?\s*\$?\s*([\d.,]+)/i,
+  /total\s+a\s+pagar\s*:?\s*\$?\s*([\d.,]+)/i,
+  /total\s+cobrado\s*:?\s*\$?\s*([\d.,]+)/i,
+  /total\s+cargo\s*:?\s*\$?\s*([\d.,]+)/i,
+  /monto\s+total\s*:?\s*\$?\s*([\d.,]+)/i,
+  /valor\s+total\s*:?\s*\$?\s*([\d.,]+)/i,
+  /total\s+transaccion\s*:?\s*\$?\s*([\d.,]+)/i,
+];
+
 function extractAmount(text: string): { amount: number; currency: string } | null {
   const currency = /US\$|USD|dolar/i.test(text) ? "USD" : "CLP";
   const searchable = stripNonTransactionAmounts(text);
 
+  // Prioridad: si existe un "total pagado" explicito, ese es el monto real.
+  for (const pattern of TOTAL_PAID_PATTERNS) {
+    const match = searchable.match(pattern);
+    if (!match?.[1]) continue;
+
+    const amount = parseAmount(match[1]);
+    if (amount !== null) return { amount, currency };
+  }
+
+  // Fallback: patrones genericos.
   for (const pattern of AMOUNT_PATTERNS) {
     const match = searchable.match(pattern);
     if (!match?.[1]) continue;
