@@ -205,6 +205,8 @@ function extractAmount(text: string): { amount: number; currency: string } | nul
 // incluyeran, una coincidencia iniciada en el asunto podria "saltar" a la
 // siguiente linea y capturar texto del cuerpo (ej. "cuotas Compra").
 const MERCHANT_PATTERNS: RegExp[] = [
+  // Tenpo y otros ponen "Comercio:\n  NOMBRE" (valor en la linea siguiente).
+  /comercio:\s*\n+\s*([^\n,.]{3,40})/i,
   /comercio:[ \t]*([^\n,.]{3,40})/i,
   /(?:establecimiento|tienda|negocio):[ \t]*([^\n,.]{3,40})/i,
   /\bpagaste[ \t]+\$?[\d.,]+[ \t]+(?:a|en)[ \t]+([^\n,.]{3,40})/i,
@@ -218,6 +220,11 @@ const MERCHANT_NOISE = [
   "banco", "el extranjero", "chile", "pesos", "moneda nacional",
   "cuotas", "cuota", "compra", "cargo", "pago", "abono", "transaccion",
   "efectivo", "debito", "tu cuentarut", "cuentarut",
+  // Palabras comunes en textos de correos bancarios que no son comercios.
+  "reflejarse", "verificar", "historial", "movimientos", "seguridad",
+  "minutos", "exitoso", "exitosa", "comprobante", "detalle", "detalles",
+  "tu saldo", "el saldo", "tu pago", "el pago",
+  "tu credito", "tu debito", "tu prepago",
 ];
 
 /** Palabras que, si aparecen, marcan el final del nombre del comercio. */
