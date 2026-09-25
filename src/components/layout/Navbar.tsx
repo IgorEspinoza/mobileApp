@@ -6,10 +6,9 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 const NAV_LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/hogar", label: "Mi Dinero" },
   { href: "/transactions", label: "Transacciones" },
   { href: "/transactions/review", label: "Revisar correos" },
-  { href: "/hogar", label: "Hogar" },
   { href: "/settings", label: "Ajustes" },
 ];
 
@@ -26,7 +25,7 @@ export function Navbar() {
     <header className="sticky top-0 z-40 border-b border-slate-700/70 bg-slate-900/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
-          <Link href="/dashboard" className="text-base font-semibold text-white">
+          <Link href="/hogar" className="text-base font-semibold text-white">
             MiDinero AI
           </Link>
 

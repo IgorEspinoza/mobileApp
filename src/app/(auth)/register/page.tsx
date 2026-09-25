@@ -33,7 +33,7 @@ export default function RegisterPage() {
     if (ok) {
       setSuccess(true);
       // Supabase puede requerir confirmación de email; si no, redirigir directo
-      setTimeout(() => router.push("/dashboard"), 2000);
+      setTimeout(() => router.push("/hogar"), 2000);
     }
   };
 

@@ -56,7 +56,7 @@ export async function middleware(request: NextRequest) {
 
   // Con sesión en auth pages → dashboard
   if (session && isPublicRoute && pathname !== "/") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/hogar", request.url));
   }
 
   return response;

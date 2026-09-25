@@ -28,7 +28,7 @@ export default function UpdatePasswordPage() {
     try {
       await updatePassword(password);
       setDone(true);
-      setTimeout(() => router.push("/dashboard"), 2500);
+      setTimeout(() => router.push("/hogar"), 2500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al actualizar la contraseña");
     } finally {
@@ -44,7 +44,7 @@ export default function UpdatePasswordPage() {
           Contraseña actualizada
         </h2>
         <p className="text-slate-400 text-sm">
-          Redirigiendo a tu dashboard...
+          Redirigiendo...
         </p>
       </div>
     );
