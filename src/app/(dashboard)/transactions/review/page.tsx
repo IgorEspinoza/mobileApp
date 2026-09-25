@@ -307,6 +307,7 @@ export default function EmailReviewPage() {
                 {/** Formulario mínimo para decidir destino y editar campos clave */}
                 {(() => {
                   const draft = getDraft(item.id);
+                  const isActionable = item.status === "pending" || item.status === "auto_classified";
                   return (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -334,7 +335,7 @@ export default function EmailReviewPage() {
                     <p className="mt-1 text-sm text-slate-300">{item.merchant || "Sin comercio"}</p>
                     <p className="mt-1 line-clamp-2 text-xs text-slate-400">{item.body_snippet || "Sin detalle"}</p>
 
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {isActionable && <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       <select
                         value={draft.destination}
                         onChange={(e) => updateDraft(item.id, { destination: e.target.value as Destination })}
@@ -403,29 +404,37 @@ export default function EmailReviewPage() {
                           className="min-h-[36px] rounded-lg border border-slate-600 bg-slate-800/70 px-2 text-xs text-slate-100 placeholder:text-slate-400"
                         />
                       )}
-                    </div>
+                    </div>}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
                     <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-200">
                       {item.predicted_category} • {Math.round(item.confidence * 100)}%
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleApprove(item.id)}
-                      disabled={isApprovingId === item.id}
-                      className="inline-flex min-h-[36px] items-center rounded-lg border border-emerald-500/50 px-3 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isApprovingId === item.id ? "Aprobando..." : "Aprobar"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleReject(item.id)}
-                      disabled={isRejectingId === item.id || isApprovingId === item.id}
-                      className="inline-flex min-h-[36px] items-center rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isRejectingId === item.id ? "Rechazando..." : "Rechazar"}
-                    </button>
+                    {isActionable ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(item.id)}
+                          disabled={isApprovingId === item.id}
+                          className="inline-flex min-h-[36px] items-center rounded-lg border border-emerald-500/50 px-3 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isApprovingId === item.id ? "Aprobando..." : "Aprobar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReject(item.id)}
+                          disabled={isRejectingId === item.id || isApprovingId === item.id}
+                          className="inline-flex min-h-[36px] items-center rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isRejectingId === item.id ? "Rechazando..." : "Rechazar"}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[10px] italic text-slate-500">
+                        {item.status === "approved" ? "Ya aprobado" : item.status === "rejected" ? "Rechazado" : "Clasificado"}
+                      </span>
+                    )}
                   </div>
                 </div>
                   );
