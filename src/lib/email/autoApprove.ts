@@ -1,11 +1,36 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+import { normalizeText } from "@/lib/email/merchantRules";
 
 /** Categorías que se redirigen a la tabla fixed_expenses en vez de expenses. */
 const FIXED_CATEGORIES = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
 /** Umbral de confianza para auto-aprobar sin revisión manual. */
 export const AUTO_APPROVE_CONFIDENCE = 0.85;
+
+/** Mapa simplificado para derivar la fuente de un ingreso desde el texto. */
+const INCOME_SOURCE_KEYWORDS: [string, "salary" | "transfer" | "deposit" | "refund"][] = [
+  // Sueldo (orden importa: mas especificos primero)
+  ["liquidacion de sueldo", "salary"], ["liquidacion de remuneraciones", "salary"],
+  ["remuneracion", "salary"], ["sueldo", "salary"], ["haberes", "salary"],
+  ["pago de sueldo", "salary"], ["pago nomina", "salary"],
+  // Transferencias
+  ["transferencia recibida", "transfer"], ["tef recibida", "transfer"],
+  ["te transfirieron", "transfer"], ["recibiste una transferencia", "transfer"],
+  // Depositos
+  ["deposito", "deposit"], ["abono en cuenta", "deposit"],
+  ["se ha depositado", "deposit"], ["abono", "deposit"],
+  // Devoluciones
+  ["devolucion", "refund"], ["reembolso", "refund"],
+];
+
+function deriveIncomeSource(text: string): "salary" | "transfer" | "deposit" | "refund" | "other" {
+  const normalized = normalizeText(text);
+  for (const [keyword, source] of INCOME_SOURCE_KEYWORDS) {
+    if (normalized.includes(keyword)) return source;
+  }
+  return "other";
+}
 
 type ClassificationRow = {
   id: string;
@@ -126,13 +151,16 @@ export async function autoApproveClassifications(
       }
 
     } else if (row.detected_type === "income") {
+      const incomeText = `${row.subject || ""} ${row.body_snippet || ""}`;
+      const incSource = deriveIncomeSource(incomeText);
+
       const { error: incError } = await supabaseAdmin
         .from("incomes")
         .insert({
           user_id: row.user_id,
           date: row.transaction_date,
           amount: row.amount,
-          source: "other",
+          source: incSource,
           description,
         });
 

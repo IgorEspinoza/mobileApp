@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { ApproveEmailClassificationSchema } from "@/lib/validations/schemas";
 import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+import { normalizeText } from "@/lib/email/merchantRules";
+
+/** Derivar fuente de ingreso desde el texto del correo. */
+const INCOME_SOURCE_KEYWORDS: [string, "salary" | "transfer" | "deposit" | "refund"][] = [
+  ["liquidacion de sueldo", "salary"], ["liquidacion de remuneraciones", "salary"],
+  ["remuneracion", "salary"], ["sueldo", "salary"], ["haberes", "salary"],
+  ["transferencia recibida", "transfer"], ["tef recibida", "transfer"],
+  ["te transfirieron", "transfer"],
+  ["deposito", "deposit"], ["abono en cuenta", "deposit"], ["abono", "deposit"],
+  ["devolucion", "refund"], ["reembolso", "refund"],
+];
+function deriveIncomeSource(text: string): "salary" | "transfer" | "deposit" | "refund" | "other" {
+  const normalized = normalizeText(text);
+  for (const [kw, src] of INCOME_SOURCE_KEYWORDS) {
+    if (normalized.includes(kw)) return src;
+  }
+  return "other";
+}
 
 const FIXED_CATEGORIES = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
@@ -192,7 +210,7 @@ export async function POST(
           user_id: user.id,
           date: payload.date,
           amount: payload.amount,
-          source: payload.source || "other",
+          source: payload.source || deriveIncomeSource(`${classification.subject || ""} ${classification.body_snippet || ""}`),
           description,
         })
         .select()

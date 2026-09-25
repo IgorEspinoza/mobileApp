@@ -29,6 +29,8 @@ export type ParsedMovement = {
   confidence: number;
   source: string;
   snippet: string;
+  /** Para ingresos: tipo de fuente (salary, transfer, deposit, refund, other). */
+  incomeSource?: "salary" | "transfer" | "deposit" | "refund" | "other";
 };
 
 /* ------------------------------------------------------------------ *
@@ -321,7 +323,43 @@ const INCOME_HINTS = [
   "abono", "deposito", "transferencia recibida", "recibiste",
   "te transfirieron", "remuneracion", "sueldo", "acreditacion",
   "devolucion", "reembolso", "pago recibido",
+  // Depósitos y TEF
+  "deposito recibido", "tef recibida", "transferencia entrante",
+  "abono en cuenta", "se ha depositado", "has recibido una transferencia",
+  "te han transferido", "ingreso en cuenta", "abono recibido",
+  "recibiste una transferencia", "deposito a tu cuenta",
+  // Liquidaciones de sueldo
+  "liquidacion de sueldo", "liquidacion de remuneraciones",
+  "liquidacion mensual", "tu liquidacion", "comprobante de remuneracion",
+  "pago de remuneracion", "pago de sueldo", "haberes",
+  "tu sueldo ha sido depositado", "remuneracion depositada",
+  "pago nomina", "anticipo de sueldo",
 ];
+
+/** Mapeo de hints a tipo de fuente de ingreso. */
+const INCOME_SOURCE_MAP: Record<string, "salary" | "transfer" | "deposit" | "refund"> = {
+  // Sueldos
+  "remuneracion": "salary", "sueldo": "salary",
+  "liquidacion de sueldo": "salary", "liquidacion de remuneraciones": "salary",
+  "liquidacion mensual": "salary", "tu liquidacion": "salary",
+  "comprobante de remuneracion": "salary", "pago de remuneracion": "salary",
+  "pago de sueldo": "salary", "haberes": "salary",
+  "tu sueldo ha sido depositado": "salary", "remuneracion depositada": "salary",
+  "pago nomina": "salary", "anticipo de sueldo": "salary",
+  // Transferencias
+  "transferencia recibida": "transfer", "recibiste": "transfer",
+  "te transfirieron": "transfer", "tef recibida": "transfer",
+  "transferencia entrante": "transfer", "has recibido una transferencia": "transfer",
+  "te han transferido": "transfer", "recibiste una transferencia": "transfer",
+  // Depósitos
+  "deposito": "deposit", "deposito recibido": "deposit",
+  "abono en cuenta": "deposit", "se ha depositado": "deposit",
+  "ingreso en cuenta": "deposit", "abono recibido": "deposit",
+  "deposito a tu cuenta": "deposit", "abono": "deposit",
+  "acreditacion": "deposit",
+  // Devoluciones
+  "devolucion": "refund", "reembolso": "refund", "pago recibido": "refund",
+};
 
 const IGNORE_HINTS = [
   "estado de cuenta", "newsletter", "promocion", "oferta", "concurso",
@@ -395,13 +433,26 @@ function isIgnorable(text: string): boolean {
   return BODY_SAFE_IGNORE_HINTS.some((hint) => normalized.includes(hint));
 }
 
-function detectType(text: string): MovementType {
+type DetectTypeResult = {
+  type: MovementType;
+  incomeSource?: "salary" | "transfer" | "deposit" | "refund" | "other";
+};
+
+function detectType(text: string): DetectTypeResult {
   const normalized = normalizeText(text);
 
-  if (INCOME_HINTS.some((hint) => normalized.includes(hint))) return "income";
-  if (EXPENSE_HINTS.some((hint) => normalized.includes(hint))) return "expense";
+  // Buscar ingresos: verificar cada hint y mapear a su fuente.
+  const matchedIncomeHint = INCOME_HINTS.find((hint) => normalized.includes(hint));
+  if (matchedIncomeHint) {
+    const incomeSource = INCOME_SOURCE_MAP[matchedIncomeHint] ?? "other";
+    return { type: "income", incomeSource };
+  }
 
-  return null;
+  if (EXPENSE_HINTS.some((hint) => normalized.includes(hint))) {
+    return { type: "expense" };
+  }
+
+  return { type: null };
 }
 
 /* ------------------------------------------------------------------ *
@@ -493,7 +544,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   // movimiento, aunque venga de un banco reconocido.
   if (isIgnorable(text)) return null;
 
-  const type = detectType(text);
+  const { type, incomeSource } = detectType(text);
 
   const money = extractAmount(text);
   if (!money) return null;
@@ -528,10 +579,22 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     merchant = source !== "desconocido" ? SOURCE_LABELS[source] ?? source : "Sin detalle";
   }
 
-  const { category, confidence } = classifyMerchant(merchant, text.slice(0, 400));
+  const { category, confidence: merchantConfidence } = classifyMerchant(merchant, text.slice(0, 400));
 
-  // Un remitente bancario conocido da mas fiabilidad al resultado.
-  const sourceBonus = source !== "desconocido" ? 0.05 : 0;
+  // Para ingresos, la confianza se basa en la deteccion de tipo, no en el merchant.
+  let finalConfidence: number;
+  if (movementType === "income") {
+    // Base alta para ingresos detectados de bancos conocidos.
+    const baseIncome = source !== "desconocido" ? 0.75 : 0.50;
+    const salaryBonus = incomeSource === "salary" ? 0.20 : 0;
+    const transferBonus = incomeSource === "transfer" || incomeSource === "deposit" ? 0.15 : 0;
+    const refundBonus = incomeSource === "refund" ? 0.10 : 0;
+    finalConfidence = Math.min(1, baseIncome + salaryBonus + transferBonus + refundBonus);
+  } else {
+    // Para gastos, usar la confianza del merchant + bonus por banco conocido.
+    const sourceBonus = source !== "desconocido" ? 0.05 : 0;
+    finalConfidence = Math.min(1, merchantConfidence + sourceBonus);
+  }
 
   return {
     type: numInstallments ? "installment" : movementType,
@@ -541,9 +604,10 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     date: extractDate(text, email.date),
     numInstallments,
     category: movementType === "income" ? "Otros" : category,
-    confidence: Math.min(1, Number((confidence + sourceBonus).toFixed(2))),
+    confidence: Number(finalConfidence.toFixed(2)),
     source,
     snippet: body.slice(0, 500),
+    ...(movementType === "income" && { incomeSource: incomeSource ?? "other" }),
   };
 }
 
@@ -564,7 +628,7 @@ export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
     return `Descartado: correo informativo (isIgnorable). Texto inicio: "${text.slice(0, 120)}"`;
   }
 
-  const type = detectType(text);
+  const { type } = detectType(text);
   const money = extractAmount(text);
 
   if (!money) {
