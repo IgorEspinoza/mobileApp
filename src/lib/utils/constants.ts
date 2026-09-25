@@ -105,8 +105,8 @@ export const EMAIL_PROVIDERS = ["gmail", "outlook"] as const;
 
 // Email Sync Limits
 export const EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS = 90;
-export const EMAIL_SYNC_DEFAULT_LIMIT = 15;
-export const EMAIL_SYNC_MAX_LIMIT = 30;
+export const EMAIL_SYNC_DEFAULT_LIMIT = 50;
+export const EMAIL_SYNC_MAX_LIMIT = 100;
 // Con maxDuration = 60s en la ruta, la lectura IMAP puede tomar hasta 35s.
 export const EMAIL_SYNC_IMAP_TIMEOUT_MS = 35_000;
 export const EMAIL_SYNC_MAX_RUNTIME_MS = 50_000;

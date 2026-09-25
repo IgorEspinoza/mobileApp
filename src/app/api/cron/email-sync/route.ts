@@ -10,6 +10,7 @@ import { autoApproveClassifications, AUTO_APPROVE_CONFIDENCE } from "@/lib/email
 import {
   EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
   EMAIL_SYNC_IMAP_TIMEOUT_MS,
+  EMAIL_SYNC_DEFAULT_LIMIT,
 } from "@/lib/utils/constants";
 
 export const runtime = "nodejs";
@@ -120,7 +121,7 @@ async function syncUserEmails(
         password: emailImport.access_token,
         mailbox: resolvedMailbox,
         since: since || bootstrapSince,
-        limit: 30,
+        limit: EMAIL_SYNC_DEFAULT_LIMIT,
         unseenOnly: false,
       }),
       EMAIL_SYNC_IMAP_TIMEOUT_MS,
@@ -139,7 +140,7 @@ async function syncUserEmails(
         fetchEmailsFromImap({
           host: cfg.host, port: cfg.port, secure: cfg.secure,
           user: emailImport.email_address, password: emailImport.access_token,
-          mailbox: resolvedMailbox, since: bootstrapSince, limit: 30, unseenOnly: false,
+          mailbox: resolvedMailbox, since: bootstrapSince, limit: EMAIL_SYNC_DEFAULT_LIMIT, unseenOnly: false,
         }),
         EMAIL_SYNC_IMAP_TIMEOUT_MS,
       );
