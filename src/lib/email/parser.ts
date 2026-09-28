@@ -578,7 +578,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     ? htmlToText(email.body)
     : decodeHtmlEntities(email.body);
 
-  const text = ;
+  const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
 
   // Un correo informativo (estado de cuenta, saldo, promocion) nunca es un
@@ -779,7 +779,7 @@ export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
     ? htmlToText(email.body)
     : decodeHtmlEntities(email.body);
 
-  const text = ;
+  const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
 
   if (isIgnorable(text)) {
