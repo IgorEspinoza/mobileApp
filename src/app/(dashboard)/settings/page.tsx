@@ -215,7 +215,7 @@ export default function SettingsPage() {
       setSyncing(true);
       setSyncResult(null);
       const res = await fetch(
-        `/api/email/sync/auto?limit=50&mailbox=${encodeURIComponent(mailbox)}&days=${days}`,
+        `/api/email/sync/auto?limit=100&mailbox=${encodeURIComponent(mailbox)}&days=${days}`,
         { method: "POST" }
       );
       const data = await res.json();
