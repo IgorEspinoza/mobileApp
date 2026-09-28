@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function GET() {
       .select("*")
       .eq("user_id", user.id)
       .eq("is_shared", false)
+      .not("category", "in", `(${FIXED_EXPENSE_CATEGORIES.join(",")})`)
       .gte("date", startDate)
       .lte("date", endDate);
 
@@ -92,6 +94,7 @@ export async function GET() {
           .select("*")
           .eq("user_id", user.id)
           .eq("is_shared", false)
+          .not("category", "in", `(${FIXED_EXPENSE_CATEGORIES.join(",")})`)
           .gte("date", startDate)
           .lte("date", endDate);
 
@@ -128,7 +131,8 @@ export async function GET() {
       .from("expenses")
       .select("amount")
       .eq("user_id", user.id)
-      .eq("is_shared", false);
+      .eq("is_shared", false)
+      .not("category", "in", `(${FIXED_EXPENSE_CATEGORIES.join(",")})`);
 
     const { data: allFixedData } = await supabase
       .from("fixed_expenses")
