@@ -220,8 +220,8 @@ export async function fetchEmailsFromImap(options: ImapFetchOptions): Promise<Fe
   const client = createImapClient(options);
 
   const mailbox = options.mailbox || "INBOX";
-  const limit = Math.max(1, Math.min(options.limit ?? 10, 50));
-  const unseenOnly = options.unseenOnly ?? true;
+  const limit = Math.max(1, Math.min(options.limit ?? 100, 500));
+  const unseenOnly = options.unseenOnly ?? false;
 
   await client.connect();
   const lock = await client.getMailboxLock(mailbox);
