@@ -163,6 +163,7 @@ export async function POST(request: NextRequest) {
 
     const cfg = getImapConfig(emailImport.provider);
     let resolvedMailbox: string;
+    let resolvedMatchedBy: string | undefined;
     try {
       const mailboxResolution = await resolveImapMailbox(
         {
@@ -175,6 +176,7 @@ export async function POST(request: NextRequest) {
         mailbox
       );
       resolvedMailbox = mailboxResolution.mailbox;
+      resolvedMatchedBy = mailboxResolution.matchedBy;
     } catch (resolveErr) {
       console.error("[email/sync/auto] Error resolviendo buzón IMAP:", resolveErr);
       const msg = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
@@ -629,7 +631,7 @@ export async function POST(request: NextRequest) {
       mailbox: {
         requested: mailbox,
         resolved: resolvedMailbox,
-        matchedBy: mailboxResolution.matchedBy,
+        matchedBy: resolvedMatchedBy,
       },
       stats: {
         fetched: fetched.length,
