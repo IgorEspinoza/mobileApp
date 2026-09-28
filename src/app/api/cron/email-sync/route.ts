@@ -186,10 +186,21 @@ async function syncUserEmails(
 
   // --- Deduplicación en lote ---
   const seenKeys = new Set<string>();
+  const seenAmountDate = new Set<string>();
   const unique = candidates.filter((c) => {
+    // Dedup by message ID or content key
     const key = c.messageId ? `mid:${c.messageId}` : `content:${c.subject}|${c.merchant}|${c.bodySnippet}`;
     if (seenKeys.has(key)) { result.duplicated += 1; return false; }
     seenKeys.add(key);
+
+    // Dedup by amount+date: same transaction from different senders.
+    // Only for amounts >= 50000 to avoid false positives on common small amounts
+    // (e.g. two different $7.000 purchases on the same day).
+    if (c.movement.amount >= 50000 && c.movement.date) {
+      const amountDateKey = `${c.movement.amount}|${c.movement.date}`;
+      if (seenAmountDate.has(amountDateKey)) { result.duplicated += 1; return false; }
+      seenAmountDate.add(amountDateKey);
+    }
     return true;
   });
 
@@ -198,19 +209,26 @@ async function syncUserEmails(
   if (unique.length > 0) {
     const { data: existingRows } = await supabaseAdmin
       .from("expense_classifications")
-      .select("id, message_id, subject, merchant, amount")
+      .select("id, message_id, subject, merchant, amount, transaction_date")
       .eq("email_import_id", emailImport.id)
       .limit(1000);
 
     if (existingRows) {
       const byMsgId = new Map<string, boolean>();
       const byContent = new Map<string, boolean>();
-      for (const row of existingRows as { message_id: string | null; subject: string | null; merchant: string | null }[]) {
+      const byAmountDate = new Set<string>();
+      for (const row of existingRows as { message_id: string | null; subject: string | null; merchant: string | null; amount: number | null; transaction_date: string | null }[]) {
         if (row.message_id) byMsgId.set(row.message_id, true);
         byContent.set(`${row.subject}|${row.merchant}`, true);
+        if (row.amount != null && Number(row.amount) >= 50000 && row.transaction_date) {
+          byAmountDate.add(`${row.amount}|${row.transaction_date}`);
+        }
       }
       newCandidates = unique.filter((c) => {
-        const exists = (c.messageId && byMsgId.has(c.messageId)) || byContent.has(`${c.subject}|${c.merchant}`);
+        const exists =
+          (c.messageId && byMsgId.has(c.messageId)) ||
+          byContent.has(`${c.subject}|${c.merchant}`) ||
+          (c.movement.amount >= 50000 && c.movement.date && byAmountDate.has(`${c.movement.amount}|${c.movement.date}`));
         if (exists) { result.duplicated += 1; return false; }
         return true;
       });

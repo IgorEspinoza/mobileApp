@@ -401,6 +401,17 @@ const IGNORE_HINTS = [
   "terminos y condiciones", "actualiza tus datos", "cambio de clave",
   "boletin informativo", "mantencion programada", "aviso legal",
   "politica de privacidad", "invitacion a", "te invitamos",
+  // Notificaciones que traen montos pero NO son transacciones reales.
+  "aviso de pago de tarjeta", "aviso de pago tarjeta",
+  "boleta esta por vencer", "boleta está por vencer",
+  "avance esta disponible", "avance está disponible",
+  "ya puedes retirar tu compra", "retira tu compra",
+  "recibimos tu solicitud de compra", "solicitud de compra",
+  "confirmamos productos de tu compra",
+  "pago de tarjeta de credito", "pago tarjeta de credito",
+  "comprobante pago tarjeta", "comprobante pago de tarjeta",
+  "pago de tu tarjeta", "pago exitoso de tu tarjeta",
+  "estilos de imagen", // promotional from OpenAI/ChatGPT
 ];
 
 /**
