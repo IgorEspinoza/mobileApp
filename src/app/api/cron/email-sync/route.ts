@@ -5,7 +5,7 @@ import {
   resolveImapMailbox,
   type FetchedEmail,
 } from "@/lib/email/imap";
-import { parsePurchaseEmail } from "@/lib/email/parser";
+import { parsePurchaseEmail, parseMultipleMovements } from "@/lib/email/parser";
 import { autoApproveClassifications, AUTO_APPROVE_CONFIDENCE } from "@/lib/email/autoApprove";
 import {
   EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
@@ -168,17 +168,23 @@ async function syncUserEmails(
 
   for (const email of fetched) {
     try {
-      const movement = parsePurchaseEmail(email);
-      if (!movement) { result.ignored += 1; continue; }
-      result.parsed += 1;
-      candidates.push({
-        email,
-        movement,
-        subject: (email.subject || "Sin asunto").slice(0, 300),
-        merchant: (movement.merchant || "Sin comercio").slice(0, 255),
-        bodySnippet: (movement.snippet || email.body || "").slice(0, 600),
-        messageId: (email.messageId || "").slice(0, 500) || null,
-      });
+      // Usar parseMultipleMovements para extraer todos los cargos
+      // (ej: "Cargo en Cuenta" de Banco Chile agrupa varios cargos)
+      const movements = parseMultipleMovements(email);
+      if (movements.length === 0) { result.ignored += 1; continue; }
+      result.parsed += movements.length;
+      for (const movement of movements) {
+        candidates.push({
+          email,
+          movement,
+          subject: (email.subject || "Sin asunto").slice(0, 300),
+          merchant: (movement.merchant || "Sin comercio").slice(0, 255),
+          bodySnippet: (movement.snippet || email.body || "").slice(0, 600),
+          messageId: movements.length > 1
+            ? `${(email.messageId || "").slice(0, 450)}__multi_${candidates.length}`
+            : (email.messageId || "").slice(0, 500) || null,
+        });
+      }
     } catch {
       result.failed += 1;
     }

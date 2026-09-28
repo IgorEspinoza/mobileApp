@@ -6,7 +6,7 @@ import {
   resolveImapMailbox,
   type FetchedEmail,
 } from "@/lib/email/imap";
-import { parsePurchaseEmail, detectSource, htmlToText } from "@/lib/email/parser";
+import { parsePurchaseEmail, parseMultipleMovements, detectSource, htmlToText } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
   EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
@@ -298,7 +298,7 @@ export async function POST(request: NextRequest) {
     // 1) Parseo en memoria (sin I/O): decide que correos son movimientos.
     type Candidate = {
       email: (typeof fetched)[number];
-      movement: NonNullable<ReturnType<typeof parsePurchaseEmail>>;
+      movement: NonNullable<ReturnType<typeof parsePurchaseEmail>>; // ParsedMovement
       subject: string;
       merchant: string;
       bodySnippet: string;
@@ -310,9 +310,11 @@ export async function POST(request: NextRequest) {
 
     for (const email of fetched) {
       try {
-        const movement = parsePurchaseEmail(email);
+        // Usar parseMultipleMovements para extraer todos los cargos de un email
+        // (ej: "Cargo en Cuenta" de Banco Chile agrupa varios cargos)
+        const movements = parseMultipleMovements(email);
 
-        if (!movement) {
+        if (movements.length === 0) {
           ignored += 1;
           ignoredSenders.set(email.from, (ignoredSenders.get(email.from) || 0) + 1);
 
@@ -332,17 +334,21 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        parsed += 1;
+        parsed += movements.length;
 
-        candidates.push({
-          email,
-          movement,
-          subject: (email.subject || "Sin asunto").slice(0, 300),
-          merchant: (movement.merchant || "Sin comercio").slice(0, 255),
-          bodySnippet: (movement.snippet || email.body || "").slice(0, 600),
-          messageId: (email.messageId || "").slice(0, 500) || null,
-          status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
-        });
+        for (const movement of movements) {
+          candidates.push({
+            email,
+            movement,
+            subject: (email.subject || "Sin asunto").slice(0, 300),
+            merchant: (movement.merchant || "Sin comercio").slice(0, 255),
+            bodySnippet: (movement.snippet || email.body || "").slice(0, 600),
+            messageId: movements.length > 1
+              ? `${(email.messageId || "").slice(0, 450)}__multi_${candidates.length}`
+              : (email.messageId || "").slice(0, 500) || null,
+            status: movement.confidence >= 0.9 ? "auto_classified" : "pending",
+          });
+        }
       } catch (error) {
         failed += 1;
         warnings.push(

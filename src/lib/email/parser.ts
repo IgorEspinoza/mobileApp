@@ -409,8 +409,7 @@ const IGNORE_HINTS = [
   "recibimos tu solicitud de compra", "solicitud de compra",
   "confirmamos productos de tu compra",
   "pago de tarjeta de credito", "pago tarjeta de credito",
-  "comprobante pago tarjeta", "comprobante pago de tarjeta",
-  "pago de tu tarjeta", "pago exitoso de tu tarjeta",
+  "pago exitoso de tu tarjeta",
   "estilos de imagen", // promotional from OpenAI/ChatGPT
 ];
 
@@ -579,7 +578,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     ? htmlToText(email.body)
     : decodeHtmlEntities(email.body);
 
-  const text = `${email.subject}\n${body}`;
+  const text = ;
   const source = detectSource(email.from) ?? "desconocido";
 
   // Un correo informativo (estado de cuenta, saldo, promocion) nunca es un
@@ -653,6 +652,123 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   };
 }
 
+/**
+ * Extrae MÚLTIPLES movimientos de un solo correo. Útil para emails del tipo
+ * "Cargo en Cuenta" de Banco de Chile que agrupan varios cargos en un solo mensaje.
+ *
+ * Busca bloques repetitivos con patrón comercio + monto dentro del body.
+ * Si solo encuentra uno, devuelve un array con un solo movimiento (igual que parsePurchaseEmail).
+ * Si no encuentra nada, devuelve un array vacío.
+ */
+export function parseMultipleMovements(email: ParsedEmail): ParsedMovement[] {
+  // Primero: siempre ejecutar el parser simple.
+  const single = parsePurchaseEmail(email);
+
+  const body = /<[a-z][\s\S]*>/i.test(email.body)
+    ? htmlToText(email.body)
+    : decodeHtmlEntities(email.body);
+
+  const source = detectSource(email.from) ?? "desconocido";
+
+  // Solo intentar multi-parse en emails "Cargo en Cuenta" o similares de bancos conocidos
+  const subject = normalizeText(email.subject || "");
+  const isMultiCandidate = source !== "desconocido" && (
+    /cargo\s+en\s+(?:tu\s+)?cuenta/i.test(subject) ||
+    /cargos?\s+(?:realizados?|del\s+d[ií]a)/i.test(subject) ||
+    /resumen\s+(?:de\s+)?(?:cargos?|movimientos?|transacciones?)/i.test(subject)
+  );
+
+  if (!isMultiCandidate) {
+    return single ? [single] : [];
+  }
+
+  // Buscar múltiples bloques de comercio + monto en el cuerpo.
+  // Patrón: líneas con un nombre de comercio seguido de un monto con $
+  const lines = body.split(/\n/);
+  const movements: ParsedMovement[] = [];
+  const seenAmounts = new Set<string>();
+
+  // Estrategia 1: buscar pares consecutivos de comercio y monto
+  // Los emails de Banco Chile suelen tener bloques como:
+  //   Comercio: EKONO PROVIDENCIA
+  //   Monto: $940
+  // o variantes con el monto en la misma línea
+  const blockPattern = /(?:comercio|establecimiento|lugar)\s*:?\s*([^\n]{3,40})(?:\n[^\n]*)*?(?:monto|valor|total|\$)\s*:?\s*\$?\s*([\d.,]+)/gi;
+  let blockMatch: RegExpExecArray | null;
+  const searchText = stripNonTransactionAmounts(body);
+
+  while ((blockMatch = blockPattern.exec(searchText)) !== null) {
+    const merchant = cleanMerchant(blockMatch[1]);
+    const amount = parseAmount(blockMatch[2]);
+    if (!merchant || amount === null || amount < 100) continue;
+    
+    const key = `${merchant}|${amount}`;
+    if (seenAmounts.has(key)) continue;
+    seenAmounts.add(key);
+
+    const { category, confidence: merchantConfidence } = classifyMerchant(merchant, "");
+    const sourceBonus = source !== "desconocido" ? 0.05 : 0;
+
+    movements.push({
+      type: "expense",
+      merchant,
+      amount,
+      currency: /US\$|USD|dolar/i.test(body) ? "USD" : "CLP",
+      date: extractDate(`${email.subject}\n${body}`, email.date),
+      numInstallments: null,
+      category,
+      confidence: Number(Math.min(1, merchantConfidence + sourceBonus).toFixed(2)),
+      source,
+      snippet: body.slice(0, 500),
+    });
+  }
+
+  // Estrategia 2: buscar líneas con formato "NOMBRE_COMERCIO  $MONTO" o "NOMBRE_COMERCIO ... $MONTO"
+  if (movements.length <= 1) {
+    movements.length = 0;
+    seenAmounts.clear();
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // Buscar líneas con un monto $ y texto antes que parece un comercio
+      const lineMatch = line.match(/^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\-.,]{2,35})(?:\s{2,}|\s*\$)\s*\$?\s*([\d]{1,3}(?:[.,]\d{3})+|[\d.,]+)\s*$/i);
+      if (!lineMatch) continue;
+
+      const merchant = cleanMerchant(lineMatch[1]);
+      const amount = parseAmount(lineMatch[2]);
+      if (!merchant || amount === null || amount < 100) continue;
+
+      const key = `${merchant}|${amount}`;
+      if (seenAmounts.has(key)) continue;
+      seenAmounts.add(key);
+
+      const { category, confidence: merchantConfidence } = classifyMerchant(merchant, "");
+      const sourceBonus = source !== "desconocido" ? 0.05 : 0;
+
+      movements.push({
+        type: "expense",
+        merchant,
+        amount,
+        currency: /US\$|USD|dolar/i.test(body) ? "USD" : "CLP",
+        date: extractDate(`${email.subject}\n${body}`, email.date),
+        numInstallments: null,
+        category,
+        confidence: Number(Math.min(1, merchantConfidence + sourceBonus).toFixed(2)),
+        source,
+        snippet: body.slice(0, 500),
+      });
+    }
+  }
+
+  // Si encontramos múltiples movimientos, devolverlos.
+  // Si solo encontramos 0-1, usar el resultado del parser simple como fallback.
+  if (movements.length > 1) {
+    return movements;
+  }
+
+  return single ? [single] : [];
+}
+
 
 /**
  * Versión de diagnóstico: en vez de devolver null, explica POR QUÉ el correo
@@ -663,7 +779,7 @@ export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
     ? htmlToText(email.body)
     : decodeHtmlEntities(email.body);
 
-  const text = `${email.subject}\n${body}`;
+  const text = ;
   const source = detectSource(email.from) ?? "desconocido";
 
   if (isIgnorable(text)) {
