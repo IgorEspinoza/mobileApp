@@ -143,9 +143,9 @@ export default function EmailReviewPage() {
     const storedDays = Number.parseInt(storedDaysRaw || "", 10);
 
     const result = await syncAuto({
-      limit: 20,
-      mailbox: storedMailbox || "__INBOX__",
-      days: Number.isFinite(storedDays) ? storedDays : 30,
+      limit: 50,
+      mailbox: storedMailbox || "__ALL_MAIL__",
+      days: Number.isFinite(storedDays) ? storedDays : 90,
     });
 
     if (result.inserted >= 0) {

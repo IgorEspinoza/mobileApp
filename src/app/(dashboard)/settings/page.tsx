@@ -115,7 +115,7 @@ export default function SettingsPage() {
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
   const [mailbox, setMailbox] = useState("__ALL_MAIL__");
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(90);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
   // Form states
@@ -215,7 +215,7 @@ export default function SettingsPage() {
       setSyncing(true);
       setSyncResult(null);
       const res = await fetch(
-        `/api/email/sync/auto?limit=30&mailbox=${encodeURIComponent(mailbox)}&days=${days}`,
+        `/api/email/sync/auto?limit=50&mailbox=${encodeURIComponent(mailbox)}&days=${days}`,
         { method: "POST" }
       );
       const data = await res.json();
