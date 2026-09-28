@@ -162,17 +162,36 @@ export async function POST(request: NextRequest) {
       ?? (emailImport.provider === "gmail" ? "__ALL_MAIL__" : "INBOX");
 
     const cfg = getImapConfig(emailImport.provider);
-    const mailboxResolution = await resolveImapMailbox(
-      {
-        host: cfg.host,
-        port: cfg.port,
-        secure: cfg.secure,
-        user: emailImport.email_address,
-        password,
-      },
-      mailbox
-    );
-    const resolvedMailbox = mailboxResolution.mailbox;
+    let resolvedMailbox: string;
+    try {
+      const mailboxResolution = await resolveImapMailbox(
+        {
+          host: cfg.host,
+          port: cfg.port,
+          secure: cfg.secure,
+          user: emailImport.email_address,
+          password,
+        },
+        mailbox
+      );
+      resolvedMailbox = mailboxResolution.mailbox;
+    } catch (resolveErr) {
+      console.error("[email/sync/auto] Error resolviendo buzón IMAP:", resolveErr);
+      const msg = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+      if (/authentication failed|invalid credentials|login failed|AUTHENTICATIONFAILED/i.test(msg)) {
+        return NextResponse.json(
+          {
+            error:
+              "Error de autenticación IMAP: Verifica tu correo y que la Contraseña de Aplicación de 16 caracteres de Google sea correcta.",
+          },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json(
+        { error: `Error conectando a IMAP (${cfg.host}): ${msg}` },
+        { status: 400 }
+      );
+    }
     // Con `days` explicito ignoramos last_sync y rebarremos la ventana pedida.
     const since = forcedDays ? null : parseDateOrNull(emailImport.last_sync);
     const startedAt = Date.now();
