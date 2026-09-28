@@ -6,7 +6,7 @@ import {
   resolveImapMailbox,
   type FetchedEmail,
 } from "@/lib/email/imap";
-import { parsePurchaseEmail, parseMultipleMovements, detectSource, htmlToText } from "@/lib/email/parser";
+import { parsePurchaseEmail, parseMultipleMovements, parsePurchaseEmailDebug, detectSource, htmlToText } from "@/lib/email/parser";
 import {
   API_RATE_LIMITS,
   EMAIL_SYNC_BOOTSTRAP_LOOKBACK_DAYS,
@@ -319,15 +319,16 @@ export async function POST(request: NextRequest) {
           ignoredSenders.set(email.from, (ignoredSenders.get(email.from) || 0) + 1);
 
           // Diagnostico: si el correo es de un banco conocido, registrar
-          // un snippet del contenido para depurar por que no se detecto monto.
+          // razon de descarte y snippet para depurar.
           const emailSource = detectSource(email.from);
           if (emailSource) {
+            const debugReason = parsePurchaseEmailDebug(email) || "sin razon especifica";
             const bodyText = /<[a-z][\s\S]*>/i.test(email.body)
               ? htmlToText(email.body)
               : email.body;
-            const snippet = bodyText.slice(0, 300).replace(/\n/g, " | ");
+            const snippet = bodyText.slice(0, 400).replace(/\n/g, " | ");
             warnings.push(
-              `[DEBUG] Correo de ${emailSource} ignorado (sin monto detectado). Asunto: "${(email.subject || "").slice(0, 80)}". Texto: ${snippet}`
+              `[DEBUG] ${emailSource} IGNORADO. Asunto: "${(email.subject || "").slice(0, 100)}". Razon: ${debugReason}. Body: ${snippet}`
             );
           }
 
@@ -631,6 +632,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Debug: resumen de todos los correos procesados
+    const allEmailsSummary = fetched.map((email) => {
+      const src = detectSource(email.from);
+      const movements = parseMultipleMovements(email);
+      return {
+        from: email.from.slice(0, 60),
+        subject: (email.subject || "").slice(0, 120),
+        date: email.date?.toISOString?.()?.slice(0, 10) ?? "?",
+        source: src ?? "desconocido",
+        detected: movements.length,
+        amounts: movements.map(m => m.amount),
+      };
+    });
+
     return NextResponse.json({
       message: "Sincronización automática completada",
       email_import_id: emailImport.id,
@@ -655,7 +670,8 @@ export async function POST(request: NextRequest) {
       },
       preview,
       ignored_senders: topIgnoredSenders,
-      warnings: warnings.slice(0, 20),
+      warnings: warnings.slice(0, 50),
+      debug_all_emails: allEmailsSummary,
     });
   } catch (err) {
     console.error("[email/sync/auto][POST] unexpected error:", err);
