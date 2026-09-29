@@ -89,18 +89,18 @@ interface SyncResult {
 }
 
 const RECOMMENDED_MAILBOXES = [
-  { value: "__INBOX__", label: "Automático: Recibidos (INBOX)" },
-  { value: "__ALL_MAIL__", label: "Automático: Todos / All Mail / Archivo" },
-  { value: "__SPAM__", label: "Automático: Spam / Correo no deseado" },
+  { value: "__ALL_MAIL__", label: "Todos / All Mail (Recomendado)" },
+  { value: "__INBOX__", label: "Recibidos (INBOX)" },
+  { value: "__SPAM__", label: "Spam / Correo no deseado" },
 ];
 
 const EMAIL_SYNC_MAILBOX_STORAGE_KEY = "email-sync-mailbox";
 const EMAIL_SYNC_DAYS_STORAGE_KEY = "email-sync-days";
 
 function formatMailboxLabel(path: string, specialUse?: string | null) {
-  if (path === "__INBOX__") return "Automático: Recibidos (INBOX)";
-  if (path === "__ALL_MAIL__") return "Automático: Todos / All Mail / Archivo";
-  if (path === "__SPAM__") return "Automático: Spam / Correo no deseado";
+  if (path === "__INBOX__") return "Recibidos (INBOX)";
+  if (path === "__ALL_MAIL__") return "Todos / All Mail (Recomendado)";
+  if (path === "__SPAM__") return "Spam / Correo no deseado";
   return specialUse ? `${path} (${specialUse})` : path;
 }
 
