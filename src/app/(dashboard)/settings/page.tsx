@@ -253,7 +253,7 @@ export default function SettingsPage() {
       setDiagnosing(true);
       setDiagnosis(null);
       const res = await fetch(
-        `/api/email/diagnose?mailbox=${encodeURIComponent(mailbox)}&days=${days}&limit=25`
+        `/api/email/diagnose?mailbox=${encodeURIComponent(mailbox)}&days=${days}&limit=100`
       );
       const data = await res.json();
 

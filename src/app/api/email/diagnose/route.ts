@@ -29,7 +29,7 @@ function getImapConfig(provider: string) {
  * Query params:
  *   mailbox: buzón a leer (default INBOX; en Gmail puedes usar "[Gmail]/All Mail")
  *   days:    ventana de búsqueda hacia atrás (default 30)
- *   limit:   cantidad máxima de correos (default 25)
+ *   limit:   cantidad máxima de correos (default 100)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const mailboxParam = params.get("mailbox") || null;
     const days = Math.min(Math.max(Number.parseInt(params.get("days") || "30", 10), 1), 365);
-    const limit = Math.min(Math.max(Number.parseInt(params.get("limit") || "25", 10), 1), 50);
+    const limit = Math.min(Math.max(Number.parseInt(params.get("limit") || "100", 10), 1), 500);
 
     const { data: emailImport, error: importError } = await supabaseAdmin
       .from("email_imports")
