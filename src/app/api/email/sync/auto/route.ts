@@ -378,17 +378,66 @@ export async function POST(request: NextRequest) {
       return true;
     });
 
+    // 2.5) Deduplicacion cruzada por monto+fecha: cuando dos correos de
+    // fuentes distintas (ej: Tenpo + Banco de Chile) reportan el mismo pago,
+    // solo quedarse con uno. Prioridad: banco > tarjeta > otros.
+    const SOURCE_PRIORITY: Record<string, number> = {
+      banco_chile: 1, bci: 2, tenpo: 3, desconocido: 4,
+    };
+
+    const crossDedupCandidates = (() => {
+      // Agrupar por amount+date
+      const groups = new Map<string, typeof uniqueCandidates>();
+      for (const c of uniqueCandidates) {
+        const key = `${c.movement.amount}|${c.movement.date}`;
+        const group = groups.get(key) || [];
+        group.push(c);
+        groups.set(key, group);
+      }
+
+      const kept = new Set<typeof uniqueCandidates[number]>();
+      for (const [, group] of groups) {
+        if (group.length <= 1) {
+          kept.add(group[0]);
+          continue;
+        }
+
+        // Multiples candidatos con mismo monto+fecha.
+        // Si vienen de remitentes distintos, es el mismo pago => quedarse con 1.
+        const distinctSenders = new Set(group.map((c) => c.email.from));
+        if (distinctSenders.size > 1) {
+          // Ordenar por prioridad de fuente (banco primero)
+          const sorted = [...group].sort((a, b) => {
+            const srcA = detectSource(a.email.from) || "desconocido";
+            const srcB = detectSource(b.email.from) || "desconocido";
+            return (SOURCE_PRIORITY[srcA] ?? 99) - (SOURCE_PRIORITY[srcB] ?? 99);
+          });
+          kept.add(sorted[0]); // Quedarse con el de mayor prioridad
+          duplicated += group.length - 1;
+          warnings.push(
+            `[DEDUP-CRUZADA] Monto $${group[0].movement.amount.toLocaleString("es-CL")} del ${group[0].movement.date}: ${group.length} correos de fuentes distintas (${[...distinctSenders].join(", ")}). Se quedo con: ${sorted[0].email.from}`
+          );
+        } else {
+          // Mismo remitente, mismo monto+fecha: podrian ser cargos distintos
+          // (ej: dos compras de $7.000 el mismo dia). Mantener todos.
+          for (const c of group) kept.add(c);
+        }
+      }
+
+      return uniqueCandidates.filter((c) => kept.has(c));
+    })();
+
     // 3) Una sola consulta para detectar duplicados ya guardados.
-    let newCandidates = uniqueCandidates;
+    let newCandidates = crossDedupCandidates;
 
     // Filas guardadas antes de aplicar la migracion 005: existen pero sin monto
     // ni fecha. En vez de saltarlas como duplicadas, las completamos.
     const candidatesToBackfill: Array<{ id: string; candidate: Candidate }> = [];
 
-    if (uniqueCandidates.length > 0) {
+    if (crossDedupCandidates.length > 0) {
       const { data: existingRows, error: existingError } = await supabaseAdmin
         .from("expense_classifications")
-        .select("id, message_id, subject, merchant, amount")
+        .select("id, message_id, subject, merchant, amount, transaction_date")
         .eq("email_import_id", emailImport.id)
         .limit(1000);
 
@@ -401,28 +450,38 @@ export async function POST(request: NextRequest) {
           subject: string | null;
           merchant: string | null;
           amount: number | null;
+          transaction_date: string | null;
         };
 
         const rows = (existingRows ?? []) as unknown as ExistingRow[];
 
         const byMessageId = new Map<string, ExistingRow>();
         const byContent = new Map<string, ExistingRow>();
+        const byAmountDate = new Map<string, ExistingRow>();
 
         for (const row of rows) {
           if (row.message_id) byMessageId.set(row.message_id, row);
           byContent.set(`${row.subject}|${row.merchant}`, row);
+          if (row.amount && row.transaction_date) {
+            byAmountDate.set(`${row.amount}|${row.transaction_date}`, row);
+          }
         }
 
-        newCandidates = uniqueCandidates.filter((c) => {
+        newCandidates = crossDedupCandidates.filter((c) => {
           const existing = c.messageId
             ? byMessageId.get(c.messageId) ?? byContent.get(`${c.subject}|${c.merchant}`)
             : byContent.get(`${c.subject}|${c.merchant}`);
+          // Tambien verificar por monto+fecha (dedup cruzada contra DB)
+          const existingByAmount = !existing
+            ? byAmountDate.get(`${c.movement.amount}|${c.movement.date}`)
+            : null;
+          const match = existing || existingByAmount;
 
-          if (!existing) return true;
+          if (!match) return true;
 
           // Ya existe. Si le falta el monto, lo completamos en vez de ignorarlo.
-          if (existing.amount === null || existing.amount === undefined) {
-            candidatesToBackfill.push({ id: existing.id, candidate: c });
+          if (match.amount === null || match.amount === undefined) {
+            candidatesToBackfill.push({ id: match.id, candidate: c });
           } else {
             duplicated += 1;
           }
