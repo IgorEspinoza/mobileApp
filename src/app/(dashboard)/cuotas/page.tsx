@@ -33,7 +33,6 @@ export default function CuotasPage() {
     createInstallment,
     updateInstallment,
     deleteInstallment,
-    toggleActive,
     fetchInstallmentCharges,
   } = useInstallments();
   const { showToast, ToastContainer } = useToast();
