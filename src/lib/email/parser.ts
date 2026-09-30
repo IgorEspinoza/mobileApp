@@ -408,8 +408,8 @@ const IGNORE_HINTS = [
   "ya puedes retirar tu compra", "retira tu compra",
   "recibimos tu solicitud de compra", "solicitud de compra",
   "confirmamos productos de tu compra",
-  "pago de tarjeta de credito", "pago tarjeta de credito",
-  "pago exitoso de tu tarjeta",
+  // NOTA: "pago de tarjeta de credito" y "pago exitoso de tu tarjeta"
+  // se CAPTURAN como gastos reales (dinero que sale de la cuenta corriente).
   "estilos de imagen", // promotional from OpenAI/ChatGPT
 ];
 

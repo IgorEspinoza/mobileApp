@@ -45,6 +45,7 @@ type ClassificationRow = {
   status: string;
   subject: string | null;
   body_snippet: string | null;
+  num_installments: number | null;
 };
 
 /**
@@ -65,7 +66,7 @@ export async function autoApproveClassifications(
   // Buscar clasificaciones que califican para auto-aprobación
   const { data: candidates, error: fetchError } = await supabaseAdmin
     .from("expense_classifications")
-    .select("id, user_id, merchant, amount, currency, transaction_date, detected_type, predicted_category, confidence, status, subject, body_snippet")
+    .select("id, user_id, merchant, amount, currency, transaction_date, detected_type, predicted_category, confidence, status, subject, body_snippet, num_installments")
     .eq("email_import_id", emailImportId)
     .eq("user_id", userId)
     .eq("status", "auto_classified")
@@ -149,6 +150,38 @@ export async function autoApproveClassifications(
 
         approved += 1;
       }
+
+    } else if (row.detected_type === "installment") {
+      // Compras en cuotas van a la tabla installments, NO a expenses.
+      // El gasto real se registra cuando llega cada cuota mensual.
+      const { data: installment, error: installError } = await supabaseAdmin
+        .from("installments")
+        .insert({
+          user_id: row.user_id,
+          product_name: merchant,
+          total_amount: row.amount,
+          num_installments: row.num_installments ?? 3,
+          start_date: row.transaction_date,
+          current_installment: 1,
+          is_active: true,
+        })
+        .select("id")
+        .single();
+
+      if (installError) {
+        errors.push(\`Installment: \${installError.message}\`);
+        continue;
+      }
+
+      await supabaseAdmin
+        .from("expense_classifications")
+        .update({
+          manual_category: row.predicted_category || "Otros",
+          installment_id: installment.id,
+        })
+        .eq("id", row.id);
+
+      approved += 1;
 
     } else if (row.detected_type === "income") {
       const incomeText = `${row.subject || ""} ${row.body_snippet || ""}`;
