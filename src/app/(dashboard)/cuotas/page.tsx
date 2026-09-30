@@ -35,7 +35,7 @@ export default function CuotasPage() {
     deleteInstallment,
     fetchInstallmentCharges,
   } = useInstallments();
-  const { showToast, ToastContainer } = useToast();
+  const toast = useToast();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -86,12 +86,9 @@ export default function CuotasPage() {
         start_date: data.start_date,
       });
       setShowCreateModal(false);
-      showToast("Cuota creada exitosamente", "success");
+      toast.success("Cuota creada exitosamente");
     } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Error al crear cuota",
-        "error"
-      );
+      toast.error(err instanceof Error ? err.message : "Error al crear cuota");
     } finally {
       setCreateLoading(false);
     }
@@ -104,25 +101,22 @@ export default function CuotasPage() {
         ...item,
         is_active: false,
       });
-      showToast(`${item.product_name} marcada como completada`, "success");
+      toast.success(`${item.product_name} marcada como completada`);
       return;
     }
     await updateInstallment(item.id, {
       ...item,
       current_installment: item.current_installment + 1,
     });
-    showToast(
-      `Cuota ${item.current_installment} de ${item.product_name} marcada como pagada`,
-      "success"
-    );
+    toast.success(`Cuota ${item.current_installment} de ${item.product_name} marcada como pagada`);
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteInstallment(id);
-      showToast("Cuota eliminada", "success");
+      toast.success("Cuota eliminada");
     } catch {
-      showToast("Error al eliminar cuota", "error");
+      toast.error("Error al eliminar cuota");
     }
   };
 
@@ -142,8 +136,6 @@ export default function CuotasPage() {
 
   return (
     <>
-      <ToastContainer />
-
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Cuotas Pendientes</h1>
