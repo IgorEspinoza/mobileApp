@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { Modal } from "@/components/common/Modal";
 import { IncomeForm, type IncomeFormData } from "@/components/forms/IncomeForm";
@@ -215,6 +216,15 @@ export function VariableExpensesSection({
                   );
                 })}
             </div>
+
+            {installments.filter((i) => i.is_active).length > 3 && (
+              <Link
+                href="/cuotas"
+                className="mt-3 inline-flex min-h-[40px] items-center text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                Ver todas las cuotas →
+              </Link>
+            )}
           </div>
 
           {/* Placeholder for Goals/Tips */}

@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/hogar", label: "Mi Dinero" },
   { href: "/transactions", label: "Transacciones" },
   { href: "/transactions/review", label: "Revisar correos" },
+  { href: "/cuotas", label: "Cuotas" },
   { href: "/settings", label: "Ajustes" },
 ];
 
