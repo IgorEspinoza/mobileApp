@@ -169,7 +169,7 @@ export async function autoApproveClassifications(
         .single();
 
       if (installError) {
-        errors.push(\`Installment: \${installError.message}\`);
+        errors.push(`Installment: ${installError.message}`);
         continue;
       }
 
