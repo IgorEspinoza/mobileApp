@@ -482,14 +482,32 @@ type DetectTypeResult = {
 function detectType(text: string): DetectTypeResult {
   const normalized = normalizeText(text);
 
-  // Buscar ingresos: verificar cada hint y mapear a su fuente.
-  const matchedIncomeHint = INCOME_HINTS.find((hint) => normalized.includes(hint));
+  // Buscar el hint MAS LARGO que matchee en cada lista (mas especifico gana).
+  const matchedExpenseHint = EXPENSE_HINTS
+    .filter((hint) => normalized.includes(hint))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+  const matchedIncomeHint = INCOME_HINTS
+    .filter((hint) => normalized.includes(hint))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+
+  // Si ambos matchean, gana el hint mas largo (mas especifico).
+  // Ej: "pago de sueldo" (income, 14 chars) > "pago" (expense, 4 chars).
+  // Ej: "cobro" (expense, 5 chars) > "abono" (income, 5 chars) — empate: gasto gana.
+  if (matchedExpenseHint && matchedIncomeHint) {
+    if (matchedIncomeHint.length > matchedExpenseHint.length) {
+      const incomeSource = INCOME_SOURCE_MAP[matchedIncomeHint] ?? "other";
+      return { type: "income", incomeSource };
+    }
+    // Empate o expense mas largo: es gasto.
+    return { type: "expense" };
+  }
+
   if (matchedIncomeHint) {
     const incomeSource = INCOME_SOURCE_MAP[matchedIncomeHint] ?? "other";
     return { type: "income", incomeSource };
   }
 
-  if (EXPENSE_HINTS.some((hint) => normalized.includes(hint))) {
+  if (matchedExpenseHint) {
     return { type: "expense" };
   }
 
