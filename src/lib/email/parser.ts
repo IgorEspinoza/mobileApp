@@ -348,12 +348,14 @@ const EXPENSE_HINTS = [
   "compra", "cargo", "carga", "pago", "pagaste", "giro", "transaccion",
   "consumo", "debito", "suscripcion", "cobro", "cargo en cuenta",
   "cargo en tu cuenta", "descuento", "retiro",
+  "comprobante de pago", "comprobante pago", "pago exitoso",
+  "pago de tarjeta", "pago fue recibido",
 ];
 
 const INCOME_HINTS = [
   "abono", "deposito", "transferencia recibida", "recibiste",
   "te transfirieron", "remuneracion", "sueldo", "acreditacion",
-  "devolucion", "reembolso", "pago recibido",
+  "devolucion", "reembolso",
   // Depósitos y TEF
   "deposito recibido", "tef recibida", "transferencia entrante",
   "abono en cuenta", "se ha depositado", "has recibido una transferencia",
@@ -389,7 +391,7 @@ const INCOME_SOURCE_MAP: Record<string, "salary" | "transfer" | "deposit" | "ref
   "deposito a tu cuenta": "deposit", "abono": "deposit",
   "acreditacion": "deposit",
   // Devoluciones
-  "devolucion": "refund", "reembolso": "refund", "pago recibido": "refund",
+  "devolucion": "refund", "reembolso": "refund",
 };
 
 const IGNORE_HINTS = [
