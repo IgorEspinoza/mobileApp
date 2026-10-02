@@ -149,6 +149,9 @@ const NON_TRANSACTION_AMOUNT_PATTERNS: RegExp[] = [
   /(?:saldo|cupo|l[ií]mite|linea|l[ií]nea)\s+(?:disponible|total|actual|utilizado|de\s+cr[eé]dito)?\s*:?\s*\$?\s*[\d.,]+/gi,
   /(?:saldo|cupo)\s*:?\s*\$?\s*[\d.,]+/gi,
   /(?:deuda|total\s+facturado|pago\s+m[ií]nimo)\s*:?\s*\$?\s*[\d.,]+/gi,
+  // Tarjetas de credito: "Utilizado $X" es el saldo usado, no la transaccion.
+  /utilizado\s*:?\s*\$?\s*[\d.,]+/gi,
+  /(?:monto\s+adeudado|deuda\s+total|saldo\s+adeudado)\s*:?\s*\$?\s*[\d.,]+/gi,
 ];
 
 function stripNonTransactionAmounts(text: string): string {
