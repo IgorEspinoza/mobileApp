@@ -353,6 +353,7 @@ const EXPENSE_HINTS = [
   "cargo en tu cuenta", "descuento", "retiro",
   "comprobante de pago", "comprobante pago", "pago exitoso",
   "pago de tarjeta", "pago fue recibido",
+  "transferencia", "comprobante de transferencia",
 ];
 
 const INCOME_HINTS = [
