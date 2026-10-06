@@ -1,5 +1,6 @@
 import type { ExpenseCategory } from "@/types/database";
 import { classifyMerchant, normalizeText } from "./merchantRules";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
 
 /**
  * Parser de correos de compras (bancos y billeteras chilenas).
@@ -55,6 +56,22 @@ const KNOWN_SENDERS: SenderRule[] = [
   { source: "mercado_pago", domains: ["mercadopago.com", "mercadolibre.com"] },
   { source: "paypal", domains: ["paypal.com"] },
   { source: "transbank", domains: ["transbank.cl", "onepay.cl", "webpay.cl"] },
+  // Plataformas de pago
+  { source: "khipu", domains: ["khipu.com"] },
+  // Empresas de servicios basicos (luz, agua, gas, internet, telefonia)
+  { source: "servicios", domains: [
+    "enel.cl", "eneldistribucion.cl",
+    "aguasandinas.cl",
+    "metrogas.cl",
+    "vtr.com", "clarovtr.cl",
+    "entel.cl",
+    "movistar.cl", "telefonica.cl",
+    "wom.cl",
+    "claro.cl",
+    "gtd.cl",
+    "mundopacifico.cl",
+    "telsur.cl",
+  ]},
 ];
 
 /** Identifica el banco/billetera emisor a partir del remitente. */
@@ -91,6 +108,8 @@ const SOURCE_LABELS: Record<string, string> = {
   mercado_pago: "Mercado Pago",
   paypal: "PayPal",
   transbank: "Transbank",
+  khipu: "Khipu",
+  servicios: "Servicios",
 };
 
 /* ------------------------------------------------------------------ *
@@ -641,7 +660,16 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     // Banco Chile y otros bancos usan "cargo en cuenta" sin mas detalle
     const hasTransactionKeyword = /(?:cargo|carga|compra|pago|debito|giro|transferencia|abono)\s+(?:en|a|de|por)/i.test(text);
 
+    // Permitir correos de servicios basicos aunque sean de remitente desconocido:
+    // si el texto matchea una categoria de gasto fijo (Luz, Agua, Gas, Internet, etc.)
+    // es muy probable que sea un comprobante de pago de servicio.
+    const preClassify = classifyMerchant(detectedMerchant ?? "", text.slice(0, 400));
+    const isFixedExpenseMatch = FIXED_EXPENSE_CATEGORIES.includes(preClassify.category) && preClassify.confidence >= 0.7;
+
     if (source !== "desconocido" && (looksTransactional || hasTransactionKeyword)) {
+      movementType = "expense";
+    } else if (isFixedExpenseMatch || (looksTransactional && hasTransactionKeyword)) {
+      // Correo de remitente desconocido pero con fuerte señal de gasto fijo o transaccional
       movementType = "expense";
     } else {
       return null;
