@@ -664,7 +664,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     // si el texto matchea una categoria de gasto fijo (Luz, Agua, Gas, Internet, etc.)
     // es muy probable que sea un comprobante de pago de servicio.
     const preClassify = classifyMerchant(detectedMerchant ?? "", text.slice(0, 400));
-    const isFixedExpenseMatch = FIXED_EXPENSE_CATEGORIES.includes(preClassify.category) && preClassify.confidence >= 0.7;
+    const isFixedExpenseMatch = (FIXED_EXPENSE_CATEGORIES as readonly string[]).includes(preClassify.category) && preClassify.confidence >= 0.7;
 
     if (source !== "desconocido" && (looksTransactional || hasTransactionKeyword)) {
       movementType = "expense";
