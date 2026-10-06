@@ -1,4 +1,8 @@
 import type { ExpenseCategory } from "@/types/database";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+
+/** Categorias de gastos fijos — match en body del correo tiene alta confianza. */
+const FIXED_CATS = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
 /**
  * Clasificador de comercios por reglas.
@@ -186,7 +190,7 @@ export function classifyMerchant(
       // Mas confianza si la coincidencia esta en el nombre del comercio
       // que si solo aparece en el cuerpo del correo.
       const inMerchant = normalizedMerchant.includes(keyword);
-      const confidence = inMerchant ? 0.95 : 0.7;
+      const confidence = inMerchant ? 0.95 : FIXED_CATS.has(rule.category) ? 0.92 : 0.7;
 
       return { category: rule.category, confidence, matchedKeyword: keyword };
     }

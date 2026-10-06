@@ -117,7 +117,7 @@ export async function autoApproveClassifications(
 
         await supabaseAdmin
           .from("expense_classifications")
-          .update({ manual_category: category })
+          .update({ status: "approved", manual_category: category })
           .eq("id", row.id);
 
         approved += 1;
@@ -145,7 +145,7 @@ export async function autoApproveClassifications(
 
         await supabaseAdmin
           .from("expense_classifications")
-          .update({ expense_id: expense.id, manual_category: category })
+          .update({ status: "approved", expense_id: expense.id, manual_category: category })
           .eq("id", row.id);
 
         approved += 1;
@@ -175,7 +175,7 @@ export async function autoApproveClassifications(
 
       await supabaseAdmin
         .from("expense_classifications")
-        .update({
+        .update({ status: "approved",
           manual_category: row.predicted_category || "Otros",
           installment_id: installment.id,
         })
@@ -204,7 +204,7 @@ export async function autoApproveClassifications(
 
       await supabaseAdmin
         .from("expense_classifications")
-        .update({ manual_category: "Otros" })
+        .update({ status: "approved", manual_category: "Otros" })
         .eq("id", row.id);
 
       approved += 1;
