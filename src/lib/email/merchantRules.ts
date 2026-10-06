@@ -84,12 +84,37 @@ const MERCHANT_RULES: MerchantRule[] = [
     ],
   },
   {
+    category: "Luz",
+    keywords: [
+      "enel", "cge", "saesa", "frontel", "chilquinta", "luz electrica",
+      "cuenta de luz", "energia electrica",
+    ],
+  },
+  {
+    category: "Agua",
+    keywords: [
+      "aguas andinas", "essbio", "esval", "nuevosur", "smapa",
+      "cuenta de agua", "agua potable",
+    ],
+  },
+  {
+    category: "Gas",
+    keywords: [
+      "metrogas", "lipigas", "abastible", "gasco",
+      "cuenta de gas", "gas natural",
+    ],
+  },
+  {
+    category: "Internet",
+    keywords: [
+      "vtr", "gtd", "mundo pacifico", "telsur", "fibra optica",
+      "cuenta internet", "banda ancha",
+    ],
+  },
+    {
     category: "Servicios",
     keywords: [
-      "entel", "movistar", "wom", "claro", "vtr", "gtd", "mundo pacifico",
-      "mundo ", "enel", "cge", "saesa", "frontel", "chilquinta",
-      "aguas andinas", "essbio", "esval", "nuevosur", "smapa",
-      "metrogas", "lipigas", "abastible", "gasco", "gas ",
+      "entel", "movistar", "wom", "claro",
       "seguro", "seguros", "mapfre", "consorcio", "metlife", "sura",
       "banco", "comision", "mantencion cuenta", "notaria", "registro civil",
     ],
@@ -182,6 +207,10 @@ export const VALID_CATEGORIES: ExpenseCategory[] = [
   "Tecnología",
   "Entretenimiento",
   "Hogar",
+  "Luz",
+  "Agua",
+  "Gas",
+  "Internet",
   "Servicios",
   "Otros",
 ];

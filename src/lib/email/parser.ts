@@ -68,6 +68,12 @@ export function detectSource(from: string): string | null {
   return null;
 }
 
+/** Dominios de remitentes que NUNCA son transacciones (informativos). */
+const IGNORED_SENDER_DOMAINS: string[] = [
+  "comunidadfeliz.cl",
+  "comunidadfeliz.com",
+];
+
 /** Nombre legible del emisor, usado cuando no se detecta el comercio. */
 const SOURCE_LABELS: Record<string, string> = {
   banco_chile: "Banco de Chile",
@@ -417,6 +423,8 @@ const IGNORE_HINTS = [
   // NOTA: "pago de tarjeta de credito" y "pago exitoso de tu tarjeta"
   // se CAPTURAN como gastos reales (dinero que sale de la cuenta corriente).
   "estilos de imagen", // promotional from OpenAI/ChatGPT
+  // Plataformas de administracion de edificios (correos informativos, no transacciones).
+  "comunidad feliz", "comunidadfeliz",
 ];
 
 /**
@@ -605,6 +613,10 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
   const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
 
+  // Remitentes cuyo dominio esta en la lista de ignorados nunca son transacciones.
+  const fromLower = email.from.toLowerCase();
+  if (IGNORED_SENDER_DOMAINS.some((domain) => fromLower.includes(domain))) return null;
+
   // Un correo informativo (estado de cuenta, saldo, promocion) nunca es un
   // movimiento, aunque venga de un banco reconocido.
   if (isIgnorable(text)) return null;
@@ -693,6 +705,10 @@ export function parseMultipleMovements(email: ParsedEmail): ParsedMovement[] {
     : decodeHtmlEntities(email.body);
 
   const source = detectSource(email.from) ?? "desconocido";
+
+  // Remitentes cuyo dominio esta en la lista de ignorados nunca son transacciones.
+  const fromLower = email.from.toLowerCase();
+  if (IGNORED_SENDER_DOMAINS.some((domain) => fromLower.includes(domain))) return [];
 
   // Solo intentar multi-parse en emails "Cargo en Cuenta" o similares de bancos conocidos
   const subject = normalizeText(email.subject || "");
@@ -805,6 +821,10 @@ export function parsePurchaseEmailDebug(email: ParsedEmail): string | null {
 
   const text = `${email.subject}\n${body}`;
   const source = detectSource(email.from) ?? "desconocido";
+
+  // Remitentes cuyo dominio esta en la lista de ignorados nunca son transacciones.
+  const fromLower = email.from.toLowerCase();
+  if (IGNORED_SENDER_DOMAINS.some((domain) => fromLower.includes(domain))) return `Descartado: remitente en lista de ignorados (${fromLower})`;
 
   if (isIgnorable(text)) {
     return `Descartado: correo informativo (isIgnorable). Texto inicio: "${text.slice(0, 120)}"`;

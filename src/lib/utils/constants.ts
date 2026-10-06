@@ -10,6 +10,10 @@ export const EXPENSE_CATEGORIES = [
   "Tecnología",
   "Entretenimiento",
   "Hogar",
+  "Luz",
+  "Agua",
+  "Gas",
+  "Internet",
   "Servicios",
   "Otros",
 ] as const;
@@ -25,6 +29,10 @@ export const CATEGORY_EMOJIS: Record<string, string> = {
   Tecnología: "💻",
   Entretenimiento: "🎬",
   Hogar: "🛋️",
+  Luz: "💡",
+  Agua: "💧",
+  Gas: "🔥",
+  Internet: "🌐",
   Servicios: "🔧",
   Otros: "📦",
 };
@@ -40,6 +48,10 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Tecnología: "#06b6d4",
   Entretenimiento: "#f59e0b",
   Hogar: "#6366f1",
+  Luz: "#fbbf24",
+  Agua: "#38bdf8",
+  Gas: "#fb923c",
+  Internet: "#a78bfa",
   Servicios: "#14b8a6",
   Otros: "#6b7280",
 };

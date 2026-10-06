@@ -67,6 +67,10 @@ export type ExpenseCategory =
   | "Tecnología"
   | "Entretenimiento"
   | "Hogar"
+  | "Luz"
+  | "Agua"
+  | "Gas"
+  | "Internet"
   | "Servicios"
   | "Otros";
 
