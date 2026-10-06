@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+import { getIncomeDateRange } from "@/lib/utils/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -18,33 +19,42 @@ export async function GET() {
     }
 
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const targetYear = now.getFullYear();
+    const targetMonth = now.getMonth(); // 0-indexed
 
-    let startDate = startOfMonth.toISOString().split("T")[0];
-    let endDate = endOfMonth.toISOString().split("T")[0];
+    // --- Rangos de fecha ---
+    // Gastos: mes calendario normal (1 al último día del mes)
+    const startOfMonth = new Date(targetYear, targetMonth, 1);
+    const endOfMonth = new Date(targetYear, targetMonth + 1, 0);
+    let expenseStartDate = startOfMonth.toISOString().split("T")[0];
+    let expenseEndDate = endOfMonth.toISOString().split("T")[0];
+
+    // Ingresos: mes fiscal (26 del mes anterior al 25 del mes actual)
+    // Los sueldos que llegan después del 25 son para el mes siguiente.
+    let incomeRange = getIncomeDateRange(targetYear, targetMonth);
+
     let monthLabel = now.toLocaleDateString("es-CL", {
       year: "numeric",
       month: "long",
     });
 
-    // 1. Obtener ingresos del periodo
+    // 1. Obtener ingresos del periodo fiscal
     let { data: incomesData } = await supabase
       .from("incomes")
       .select("*")
       .eq("user_id", user.id)
-      .gte("date", startDate)
-      .lte("date", endDate);
+      .gte("date", incomeRange.from)
+      .lte("date", incomeRange.to);
 
-    // 2. Obtener gastos personales del periodo (excluir gastos fijos tipo "Gastos Comunes" etc.)
+    // 2. Obtener gastos personales del periodo calendario
     let { data: expensesData } = await supabase
       .from("expenses")
       .select("*")
       .eq("user_id", user.id)
       .eq("is_shared", false)
       .not("category", "in", `(${FIXED_EXPENSE_CATEGORIES.join(",")})`)
-      .gte("date", startDate)
-      .lte("date", endDate);
+      .gte("date", expenseStartDate)
+      .lte("date", expenseEndDate);
 
     let incomes = incomesData ?? [];
     let expenses = expensesData ?? [];
@@ -72,11 +82,16 @@ export async function GET() {
 
       if (dates.length > 0) {
         const mostRecent = dates.sort((a, b) => b.getTime() - a.getTime())[0];
-        const altStart = new Date(mostRecent.getFullYear(), mostRecent.getMonth(), 1);
-        const altEnd = new Date(mostRecent.getFullYear(), mostRecent.getMonth() + 1, 0);
+        const altYear = mostRecent.getFullYear();
+        const altMonth = mostRecent.getMonth();
 
-        startDate = altStart.toISOString().split("T")[0];
-        endDate = altEnd.toISOString().split("T")[0];
+        const altStart = new Date(altYear, altMonth, 1);
+        const altEnd = new Date(altYear, altMonth + 1, 0);
+
+        expenseStartDate = altStart.toISOString().split("T")[0];
+        expenseEndDate = altEnd.toISOString().split("T")[0];
+        incomeRange = getIncomeDateRange(altYear, altMonth);
+
         monthLabel = mostRecent.toLocaleDateString("es-CL", {
           year: "numeric",
           month: "long",
@@ -86,8 +101,8 @@ export async function GET() {
           .from("incomes")
           .select("*")
           .eq("user_id", user.id)
-          .gte("date", startDate)
-          .lte("date", endDate);
+          .gte("date", incomeRange.from)
+          .lte("date", incomeRange.to);
 
         const { data: altExpenses } = await supabase
           .from("expenses")
@@ -95,8 +110,8 @@ export async function GET() {
           .eq("user_id", user.id)
           .eq("is_shared", false)
           .not("category", "in", `(${FIXED_EXPENSE_CATEGORIES.join(",")})`)
-          .gte("date", startDate)
-          .lte("date", endDate);
+          .gte("date", expenseStartDate)
+          .lte("date", expenseEndDate);
 
         incomes = altIncomes ?? [];
         expenses = altExpenses ?? [];
@@ -107,7 +122,7 @@ export async function GET() {
     const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
     // 3. Obtener gastos fijos del mes
-    const displayMonthFirst = startDate; // first of the displayed month
+    const displayMonthFirst = expenseStartDate; // first of the displayed month
     const { data: fixedExpensesData } = await supabase
       .from("fixed_expenses")
       .select("*")
