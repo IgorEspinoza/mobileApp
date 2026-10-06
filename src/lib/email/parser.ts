@@ -756,7 +756,8 @@ export function parseMultipleMovements(email: ParsedEmail): ParsedMovement[] {
   const isMultiCandidate = source !== "desconocido" && (
     /cargo\s+en\s+(?:tu\s+)?cuenta/i.test(subject) ||
     /cargos?\s+(?:realizados?|del\s+d[ií]a)/i.test(subject) ||
-    /resumen\s+(?:de\s+)?(?:cargos?|movimientos?|transacciones?)/i.test(subject)
+    /resumen\s+(?:de\s+)?(?:cargos?|movimientos?|transacciones?)/i.test(subject) ||
+    /comprobante\s+de\s+pago/i.test(subject)
   );
 
   if (!isMultiCandidate) {
@@ -832,6 +833,43 @@ export function parseMultipleMovements(email: ParsedEmail): ParsedMovement[] {
         amount,
         currency: /US\$|USD|dolar/i.test(body) ? "USD" : "CLP",
         date: extractDate(`${email.subject}\n${body}`, email.date),
+        numInstallments: null,
+        category,
+        confidence: Number(Math.min(1, merchantConfidence + sourceBonus).toFixed(2)),
+        source,
+        snippet: body.slice(0, 500),
+      });
+    }
+  }
+
+  // Estrategia 3: "Empresa X ID Y Monto $Z" — Banco Chile "Comprobante de Pago Cuentas"
+  if (movements.length <= 1) {
+    movements.length = 0;
+    seenAmounts.clear();
+
+    const empresaPattern = /Empresa\s+(.+?)\s+(?:ID\s+\d+\s+)?Monto\s+\$\s*([\d.,]+)/gi;
+    let empresaMatch: RegExpExecArray | null;
+
+    while ((empresaMatch = empresaPattern.exec(body)) !== null) {
+      const merchant = cleanMerchant(empresaMatch[1].trim());
+      const amount = parseAmount(empresaMatch[2]);
+      if (!merchant || amount === null || amount < 100) continue;
+
+      const key = `${merchant}|${amount}`;
+      if (seenAmounts.has(key)) continue;
+      seenAmounts.add(key);
+
+      const bodyContext = stripUrls(body).slice(0, 1500);
+      const { category, confidence: merchantConfidence } = classifyMerchant(merchant, bodyContext);
+      const sourceBonus = source !== "desconocido" ? 0.05 : 0;
+
+      movements.push({
+        type: "expense",
+        merchant,
+        amount,
+        currency: "CLP",
+        date: extractDate(`${email.subject}
+${body}`, email.date),
         numInstallments: null,
         category,
         confidence: Number(Math.min(1, merchantConfidence + sourceBonus).toFixed(2)),

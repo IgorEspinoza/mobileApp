@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { EXPENSE_CATEGORIES } from "@/lib/utils/constants";
+import { EXPENSE_CATEGORIES, FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const VALID_CATEGORIES = new Set<string>(EXPENSE_CATEGORIES);
+const FIXED_CATEGORIES = new Set<string>(FIXED_EXPENSE_CATEGORIES);
 
 type ClassificationRow = {
   id: string;
@@ -144,6 +145,16 @@ export async function POST(request: NextRequest) {
           });
 
           if (installmentError) throw new Error(installmentError.message);
+        } else if (FIXED_CATEGORIES.has(category)) {
+          const { error: fixedError } = await supabase.from("fixed_expenses").insert({
+            user_id: user.id,
+            name: merchant,
+            amount,
+            category,
+            due_date: new Date(date).getDate(),
+          });
+
+          if (fixedError) throw new Error(fixedError.message);
         } else {
           const { error: expenseError } = await supabase.from("expenses").insert({
             user_id: user.id,

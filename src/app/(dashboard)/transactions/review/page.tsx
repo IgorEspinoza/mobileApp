@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loading } from "@/components/common/Loading";
 import { useEmailReview } from "@/hooks/useEmailReview";
 import { useToast } from "@/hooks/useToast";
+import { FIXED_EXPENSE_CATEGORIES } from "@/lib/utils/constants";
 
 const CATEGORIES = [
   "Arriendo",
@@ -17,14 +18,20 @@ const CATEGORIES = [
   "Tecnología",
   "Entretenimiento",
   "Hogar",
+  "Luz",
+  "Agua",
+  "Gas",
+  "Internet",
   "Servicios",
   "Otros",
 ] as const;
 
+const FIXED_CATS_SET = new Set<string>(FIXED_EXPENSE_CATEGORIES);
+
 const EMAIL_SYNC_MAILBOX_STORAGE_KEY = "email-sync-mailbox";
 const EMAIL_SYNC_DAYS_STORAGE_KEY = "email-sync-days";
 
-type Destination = "expense" | "income" | "installment";
+type Destination = "expense" | "fixed_expense" | "income" | "installment";
 
 interface DraftOverride {
   destination: Destination;
@@ -108,11 +115,11 @@ export default function EmailReviewPage() {
     }
 
     const payload = {
-      destination: draft.destination,
+      destination: draft.destination === "fixed_expense" ? "expense" : draft.destination,
       date: draft.date,
       amount,
       merchant: draft.merchant || target.merchant || target.subject,
-      category: draft.destination === "expense" || draft.destination === "installment" ? draft.category : undefined,
+      category: draft.destination === "expense" || draft.destination === "fixed_expense" || draft.destination === "installment" ? draft.category : undefined,
       source: draft.destination === "income" ? draft.source : undefined,
       num_installments:
         draft.destination === "installment"
@@ -342,6 +349,7 @@ export default function EmailReviewPage() {
                         className="min-h-[36px] rounded-lg border border-slate-600 bg-slate-800/70 px-2 text-xs text-slate-100"
                       >
                         <option value="expense">Gasto</option>
+                        <option value="fixed_expense">Gasto Fijo</option>
                         <option value="income">Ingreso</option>
                         <option value="installment">Cuota</option>
                       </select>
@@ -387,7 +395,10 @@ export default function EmailReviewPage() {
                           onChange={(e) => updateDraft(item.id, { category: e.target.value })}
                           className="min-h-[36px] rounded-lg border border-slate-600 bg-slate-800/70 px-2 text-xs text-slate-100"
                         >
-                          {CATEGORIES.map((category) => (
+                          {(draft.destination === "fixed_expense"
+                            ? CATEGORIES.filter((c) => FIXED_CATS_SET.has(c))
+                            : CATEGORIES
+                          ).map((category) => (
                             <option key={category} value={category}>{category}</option>
                           ))}
                         </select>
