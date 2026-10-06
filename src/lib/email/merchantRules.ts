@@ -111,16 +111,17 @@ const MERCHANT_RULES: MerchantRule[] = [
   {
     category: "Internet",
     keywords: [
-      "vtr", "gtd", "mundo pacifico", "telsur", "fibra optica",
+      "vtr", "clarovtr", "gtd", "mundo pacifico", "telsur", "fibra optica",
       "cuenta internet", "banda ancha",
+      "entel", "movistar", "wom", "claro movil", "claro hogar", "claro fibra",
+      "claro",
     ],
   },
     {
     category: "Servicios",
     keywords: [
-      "entel", "movistar", "wom", "claro",
       "seguro", "seguros", "mapfre", "consorcio", "metlife", "sura",
-      "banco", "comision", "mantencion cuenta", "notaria", "registro civil",
+      "comision bancaria", "comision", "mantencion cuenta", "notaria", "registro civil",
     ],
   },
   {

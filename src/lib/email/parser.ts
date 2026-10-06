@@ -239,6 +239,8 @@ const MERCHANT_PATTERNS: RegExp[] = [
   /(?:establecimiento|tienda|negocio):[ \t]*([^\n,.]{3,40})/i,
   /\bpagaste[ \t]+\$?[\d.,]+[ \t]+(?:a|en)[ \t]+([^\n,.]{3,40})/i,
   /\ba[ \t]+favor[ \t]+de[ \t]+([^\n,.]{3,40})/i,
+  // Banco Chile "Comprobante de Pago Cuentas": "Empresa Claro Móvil ID 123"
+  /empresa[ \t]+([A-Za-zÁÉÍÓÚÑáéíóúñ0-9&.\-* \t]{3,40}?)(?:[ \t]+ID\b|[ \t]+RUT\b|[ \t]+\d{5,}|\n|$)/i,
   /\ben[ \t]+(?:el[ \t]+)?(?:comercio[ \t]+)?["']?([A-Za-zÁÉÍÓÚÑáéíóúñ0-9&.\-* \t]{3,40}?)["']?[ \t]*(?:\.|,|\n|\bel\b|\bpor\b|\bcon\b|$)/i,
 ];
 
@@ -621,6 +623,17 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
+ * Quita URLs entre corchetes (tipicas de htmlToText) y URLs sueltas que
+ * desperdician espacio en el contexto de clasificacion.
+ */
+function stripUrls(text: string): string {
+  return text
+    .replace(/\[https?:\/\/[^\]]*\]/gi, "")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s{2,}/g, " ");
+}
+
+/**
  * Analiza un correo y devuelve el movimiento detectado, o `null` si el correo
  * no corresponde a una transaccion (promociones, estados de cuenta, etc.).
  */
@@ -663,7 +676,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     // Permitir correos de servicios basicos aunque sean de remitente desconocido:
     // si el texto matchea una categoria de gasto fijo (Luz, Agua, Gas, Internet, etc.)
     // es muy probable que sea un comprobante de pago de servicio.
-    const preClassify = classifyMerchant(detectedMerchant ?? "", text.slice(0, 400));
+    const preClassify = classifyMerchant(detectedMerchant ?? "", stripUrls(text).slice(0, 1500));
     const isFixedExpenseMatch = (FIXED_EXPENSE_CATEGORIES as readonly string[]).includes(preClassify.category) && preClassify.confidence >= 0.7;
 
     if (source !== "desconocido" && (looksTransactional || hasTransactionKeyword)) {
@@ -684,7 +697,7 @@ export function parsePurchaseEmail(email: ParsedEmail): ParsedMovement | null {
     merchant = source !== "desconocido" ? SOURCE_LABELS[source] ?? source : "Sin detalle";
   }
 
-  const { category, confidence: merchantConfidence } = classifyMerchant(merchant, text.slice(0, 400));
+  const { category, confidence: merchantConfidence } = classifyMerchant(merchant, stripUrls(text).slice(0, 1500));
 
   // Para ingresos, la confianza se basa en la deteccion de tipo, no en el merchant.
   let finalConfidence: number;
